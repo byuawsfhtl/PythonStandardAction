@@ -121,7 +121,7 @@ class CodeChecker(ast.NodeVisitor):
             self.errors.append(self.toString(node, f"Function '{node.name}'  uses '__' inappropriately."))
 
         for arg in node.args.args:
-            if arg.annotation is None and arg.arg != 'self' and '*' not in arg.arg and '**' not in arg.arg:
+            if arg.annotation is None and arg.arg != 'self' and arg.arg != 'cls' and '*' not in arg.arg and '**' not in arg.arg:
                 self.errors.append(self.toString(node, f"Function '{node.name}'  has parameter '{arg.arg}' without type annotation."))
 
             if not self.isValidFormat(arg.arg):
