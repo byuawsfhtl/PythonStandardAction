@@ -43,11 +43,12 @@ class CodeChecker(ast.NodeVisitor):
                 ignoreItems = [line.strip().strip("!") for line in file if line.strip() and line.startswith('!')]
         return ignoreItems
 
-    def isValidFormat(self, name: str) -> bool:
+    def isValidFormat(self, name: str, type: str = None) -> bool:
         """Check if a name is in camel case or other valid format.
 
         Args:
             name (str): the name to check
+            type (str): the type of name to check
 
         Returns:
             bool: true if the name is in camel case or other valid format, False otherwise
@@ -64,7 +65,31 @@ class CodeChecker(ast.NodeVisitor):
                     if not char.isupper():
                         return False
             return True
+        if type:
+            return self.isPascalCase(name)
+        return self.isCamelCase(name)
+    
+    def isCamelCase(self, name: str) -> bool:
+        """Check if a name is in camel case.
+
+        Args:
+            name (str): the name to check
+
+        Returns:
+            bool: true if the name is in camel case, False otherwise
+        """
         return re.match(r'^[a-z0-9]+(?:[A-Z][a-z0-9]*)*$', name) is not None
+    
+    def isPascalCase(self, name: str) -> bool:
+        """Check if a name is in pascal case.
+
+        Args:
+            name (str): the name to check
+
+        Returns:
+            bool: true if the name is in pascal case, False otherwise
+        """
+        return re.match(r'^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)*$', name) is not None
 
     def toString(self, node: ast, message: str) -> str:
         """Converts a node and a message to a string.
@@ -108,6 +133,16 @@ class CodeChecker(ast.NodeVisitor):
         if node.returns is None:
             self.errors.append(self.toString(node, f"Function '{node.name}'  is missing a return type annotation."))
         
+        self.generic_visit(node)
+
+    def visit_ClassDef(self, node: ast) -> None:
+        """Visit a ClassDef node
+
+        Args:
+            node (ast): the node to visit
+        """
+        if not self.isValidFormat(node.name, type='class'):
+            self.errors.append(self.toString(node, f"Class '{node.name}' is not in Pascal case."))
         self.generic_visit(node)
 
     def checkDocstring(self, node: ast) -> None:
