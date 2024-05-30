@@ -26,7 +26,7 @@ class CodeChecker(ast.NodeVisitor):
             '__irshift__', '__iand__', '__ixor__', '__ior__', '__neg__', '__pos__', '__abs__',
             '__invert__', '__complex__', '__int__', '__float__', '__round__', '__index__',
             '__enter__', '__exit__', '__await__', '__aiter__', '__anext__', '__aenter__', '__aexit__',
-            '__version__'
+            '__version__', '__class__'
         }
         self.itemsToIgnore = self.loadItemsToIgnore('.standardignore')
 
