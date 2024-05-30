@@ -13,4 +13,4 @@ runs:
     
     - name: Run Check
       shell: bash
-      run: python StandardCheck.py
+      run: python ${{ github.action_path }}/StandardCheck.py
