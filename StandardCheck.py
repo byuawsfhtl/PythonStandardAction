@@ -158,7 +158,12 @@ class CodeChecker(ast.NodeVisitor):
         if docstring:
             # Split docstring into sections
             sections = re.split(r'Args:|Returns:|Notes:|Yields:|Raises:|Updates:', docstring, flags=re.IGNORECASE)[1:]
-            firstLine = docstring.split('\n')[0].strip()
+            firstLineEndIndex = docstring.find('\n\n')
+            if firstLineEndIndex == -1:
+                firstLine = docstring.strip()
+            else: 
+                firstLine = docstring[0:firstLineEndIndex].strip()
+
             if not firstLine or ':' in firstLine:
                 self.errors.append(self.toString(node, f"'{node.name}' docstring description is missing."))
             if ':' not in firstLine and not firstLine.endswith('.'):
