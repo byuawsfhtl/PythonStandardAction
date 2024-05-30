@@ -5,7 +5,7 @@ import re
 import sys
 
 class CodeChecker(ast.NodeVisitor):
-    def __init__(self, filename: str):
+    def __init__(self, filename: str) -> None:
         """Initializes the CodeChecker class.
 
         Args:
@@ -28,7 +28,7 @@ class CodeChecker(ast.NodeVisitor):
         }
         self.itemsToIgnore = self.loadItemsToIgnore('.standardignore')
 
-    def loadItemsToIgnore(self, ignoreFile: str):
+    def loadItemsToIgnore(self, ignoreFile: str) -> list:
         """Load items to ignore from a file.
 
         Args:
@@ -96,6 +96,9 @@ class CodeChecker(ast.NodeVisitor):
         for arg in node.args.args:
             if arg.annotation is None and arg.arg != 'self' and '*' not in arg.arg and '**' not in arg.arg:
                 self.errors.append(self.toString(node, f"Function '{node.name}'  has parameter '{arg.arg}' without type annotation."))
+
+            if not self.isValidFormat(arg.arg):
+                self.errors.append(self.toString(node, f"Function '{node.name}'  has parameter '{arg.arg}' that is not in camel case."))
 
         for default in node.args.defaults:
             if isinstance(default, ast.Dict) or isinstance(default, ast.List) or isinstance(default, ast.Set):
@@ -187,22 +190,24 @@ def loadIgnorePatterns(ignoreFile: str) -> list:
             patterns = [line.strip() for line in file if line.strip() and not line.startswith('#') and not line.startswith('!')]
     return patterns
 
-def shouldIgnore(file_path: str, patterns: list) -> bool:
+def shouldIgnore(filePath: str, patterns: list) -> bool:
     """Check if a file should be ignored based on patterns.
 
     Args:
-        file_path (str): the file to check
+        filePath (str): the file to check
         patterns (list): the patterns to check against
 
     Returns:
         bool: true if the file should be ignored, False otherwise
     """    
     for pattern in patterns:
-        if fnmatch.fnmatch(file_path, pattern):
+        if fnmatch.fnmatch(filePath, pattern):
             return True
     return False
 
-def main():
+def main() -> None:
+    """Main function to check all files in the current directory.
+    """
     ignore = loadIgnorePatterns('.standardignore')
     errors = []
     for root, dirs, files in os.walk('.'):
@@ -211,10 +216,10 @@ def main():
             continue
         for file in files:
             if file.endswith('.py'):
-                file_path = os.path.join(root, file)
-                if shouldIgnore(file_path, ignore):
+                filePath = os.path.join(root, file)
+                if shouldIgnore(filePath, ignore):
                     continue
-                errors.extend(checkFile(file_path))
+                errors.extend(checkFile(filePath))
     
     if errors:
         for error in errors:
