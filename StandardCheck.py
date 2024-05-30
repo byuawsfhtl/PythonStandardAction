@@ -85,29 +85,25 @@ class CodeChecker(ast.NodeVisitor):
             node (ast): the node to visit
         """
         # Skip special methods
-        if node.name not in self.special_methods:
-            if not ast.get_docstring(node):
-                self.errors.append(self.toString(node, f"Function '{node.name}'  is missing a docstring."))
+        self.checkDocstring(node)
 
-            self.checkDocstring(node)
+        if not self.isValidFormat(node.name):
+            self.errors.append(self.toString(node, f"Function '{node.name}'  is not in camel case."))
 
-            if not self.isValidFormat(node.name):
-                self.errors.append(self.toString(node, f"Function '{node.name}'  is not in camel case."))
+        if '__' in node.name and node.name not in self.special_methods:
+            self.errors.append(self.toString(node, f"Function '{node.name}'  uses '__' inappropriately."))
 
-            if '__' in node.name:
-                self.errors.append(self.toString(node, f"Function '{node.name}'  uses '__' inappropriately."))
+        for arg in node.args.args:
+            if arg.annotation is None and arg.arg != 'self' and '*' not in arg.arg and '**' not in arg.arg:
+                self.errors.append(self.toString(node, f"Function '{node.name}'  has parameter '{arg.arg}' without type annotation."))
 
-            for arg in node.args.args:
-                if arg.annotation is None and arg.arg != 'self' and '*' not in arg.arg and '**' not in arg.arg:
-                    self.errors.append(self.toString(node, f"Function '{node.name}'  has parameter '{arg.arg}' without type annotation."))
+        for default in node.args.defaults:
+            if isinstance(default, ast.Dict) or isinstance(default, ast.List) or isinstance(default, ast.Set):
+                self.errors.append(self.toString(node, f"Function '{node.name}' has a mutable default argument."))
 
-            for default in node.args.defaults:
-                if isinstance(default, ast.Dict) or isinstance(default, ast.List) or isinstance(default, ast.Set):
-                    self.errors.append(self.toString(node, f"Function '{node.name}' has a mutable default argument."))
-
-            # Check for return type annotation
-            if node.returns is None:
-                self.errors.append(self.toString(node, f"Function '{node.name}'  is missing a return type annotation."))
+        # Check for return type annotation
+        if node.returns is None:
+            self.errors.append(self.toString(node, f"Function '{node.name}'  is missing a return type annotation."))
         
         self.generic_visit(node)
 
@@ -145,8 +141,10 @@ class CodeChecker(ast.NodeVisitor):
 
                                 if additionalInfo == colonSplit[-1] and additionalInfo.strip().endswith(';'):
                                     self.errors.append(self.toString(node, f"Function '{node.name}' has invalid ending character(;) in argument definition when no additional information is present"))
+        else:
+            self.errors.append(self.toString(node, f"Function '{node.name}' is missing a docstring."))
 
-    def visit_Name(self, node) -> None:
+    def visit_Name(self, node: ast) -> None:
         """Visit a Name node
 
         Args:
@@ -154,7 +152,7 @@ class CodeChecker(ast.NodeVisitor):
         """
         if isinstance(node.ctx, (ast.Store, ast.Param)):
             if '__' in node.id and node.id not in self.special_methods:
-                self.errors.append(f"{self.filename}:{node.lineno}: Variable '{node.id}'  uses '__' inappropriately.")
+                self.errors.append(self.toString(node, f"Variable '{node.id}'  uses '__' inappropriately."))
             if not self.isValidFormat(node.id):
                 self.errors.append(self.toString(node, f"Variable '{node.id}' is not in camel case."))
         self.generic_visit(node)
