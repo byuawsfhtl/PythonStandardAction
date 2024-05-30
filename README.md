@@ -20,6 +20,8 @@ As a lab, certain standards have been generally adopted, but have had a hard tim
 
 7. Functions must specify a return type.
 
+8. Class names must be in pascal case (ex. ExampleClass)
+
 ## Adding action to your workflow
 
 This action is best used in the same section as the meds action. Just add it as another step like the following.
