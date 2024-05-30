@@ -175,6 +175,8 @@ class CodeChecker(ast.NodeVisitor):
                     if line.strip() and ':' in line:
                         line = line.strip()
                         argumentDefinition = line.split(':')[1].strip()
+                        if not argumentDefinition:
+                            continue
                         if argumentDefinition[0].isupper():
                             self.errors.append(self.toString(node, f"'{node.name}' has beginning capital letter in argument definition"))
                         if argumentDefinition.endswith('.'):
