@@ -2,12 +2,15 @@ name: Deploy
 
 on:
   push:
-    branches:
-      - prd
+    branches: [prd]
+    paths-ignore:
+      - '**/README.md'
+      - '**/.gitignore'
+      - '**/.github/*'
 
 jobs:
     deploy:
         runs-on: ubuntu-latest
         steps:
           - name: Follow Python Standard
-            uses: byuawsfhtl/PythonStandardAction@v1.0.1
+            uses: byuawsfhtl/PythonStandardAction@v1
