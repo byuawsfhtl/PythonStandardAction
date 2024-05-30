@@ -170,15 +170,11 @@ class CodeChecker(ast.NodeVisitor):
                         if len(colonSplit) > 1:
                             for additionalInfo in colonSplit[1:]:
                                 if not additionalInfo:
-                                    self.errors.append(self.toString(node, f"Function '{node.name}' has invalid character ending(;) in argument definition when no additional information is present"))
                                     continue
                                 if additionalInfo.strip()[0].isupper():
                                     self.errors.append(self.toString(node, f"Function '{node.name}' has beginning capital letter in argument definition"))
                                 if additionalInfo.strip().endswith('.'):
                                     self.errors.append(self.toString(node, f"Function '{node.name}' has invalid ending character(.) in argument definition"))
-
-                                if additionalInfo == colonSplit[-1] and additionalInfo.strip().endswith(';'):
-                                    self.errors.append(self.toString(node, f"Function '{node.name}' has invalid ending character(;) in argument definition when no additional information is present"))
         else:
             self.errors.append(self.toString(node, f"Function '{node.name}' is missing a docstring."))
 
