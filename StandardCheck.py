@@ -5,6 +5,8 @@ import re
 import sys
 
 class CodeChecker(ast.NodeVisitor):
+    """Class to check Python code for formatting issues."""
+
     def __init__(self, filename: str) -> None:
         """Initializes the CodeChecker class.
 
@@ -89,7 +91,7 @@ class CodeChecker(ast.NodeVisitor):
         Returns:
             bool: true if the name is in pascal case, False otherwise
         """
-        return re.match(r'^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)*$', name) is not None
+        return re.match(r'^[A-Z][A-Za-z0-9]+(?:[A-Z][a-z0-9]*)*$', name) is not None
 
     def toString(self, node: ast, message: str) -> str:
         """Converts a node and a message to a string.
@@ -104,7 +106,7 @@ class CodeChecker(ast.NodeVisitor):
         return f"{self.filename}:{node.lineno}: {message}"
 
     def visit_FunctionDef(self, node: ast) -> None:
-        """Visit a FunctionDef node
+        """Visit a FunctionDef node.
 
         Args:
             node (ast): the node to visit
@@ -136,17 +138,18 @@ class CodeChecker(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ClassDef(self, node: ast) -> None:
-        """Visit a ClassDef node
+        """Visit a ClassDef node.
 
         Args:
             node (ast): the node to visit
         """
         if not self.isValidFormat(node.name, type='class'):
             self.errors.append(self.toString(node, f"Class '{node.name}' is not in Pascal case."))
+        self.checkDocstring(node)
         self.generic_visit(node)
 
     def checkDocstring(self, node: ast) -> None:
-        """Check the docstring of a function for formatting issues.
+        """Check the docstring of a node.
 
         Args:
             node (ast): the node to check
@@ -155,6 +158,11 @@ class CodeChecker(ast.NodeVisitor):
         if docstring:
             # Split docstring into sections
             sections = re.split(r'Args:|Returns:|Notes:|Yields:|Raises:|Updates:', docstring, flags=re.IGNORECASE)[1:]
+            firstLine = docstring.split('\n')[0].strip()
+            if not firstLine or ':' in firstLine:
+                self.errors.append(self.toString(node, f"'{node.name}' docstring description is missing."))
+            if ':' not in firstLine and not firstLine.endswith('.'):
+                self.errors.append(self.toString(node, f"'{node.name}' docstring description does not end with a period."))
 
             if sections:
                 lines = sections[0].split('\n')
@@ -163,23 +171,23 @@ class CodeChecker(ast.NodeVisitor):
                         line = line.strip()
                         argumentDefinition = line.split(':')[1].strip()
                         if argumentDefinition[0].isupper():
-                            self.errors.append(self.toString(node, f"Function '{node.name}' has beginning capital letter in argument definition"))
+                            self.errors.append(self.toString(node, f"'{node.name}' has beginning capital letter in argument definition"))
                         if argumentDefinition.endswith('.'):
-                            self.errors.append(self.toString(node, f"Function '{node.name}' has invalid ending character(.) in argument definition"))
+                            self.errors.append(self.toString(node, f"'{node.name}' has invalid ending character(.) in argument definition"))
                         colonSplit = argumentDefinition.split(';')
                         if len(colonSplit) > 1:
                             for additionalInfo in colonSplit[1:]:
                                 if not additionalInfo:
                                     continue
                                 if additionalInfo.strip()[0].isupper():
-                                    self.errors.append(self.toString(node, f"Function '{node.name}' has beginning capital letter in argument definition"))
+                                    self.errors.append(self.toString(node, f"'{node.name}' has beginning capital letter in argument definition"))
                                 if additionalInfo.strip().endswith('.'):
-                                    self.errors.append(self.toString(node, f"Function '{node.name}' has invalid ending character(.) in argument definition"))
+                                    self.errors.append(self.toString(node, f"'{node.name}' has invalid ending character(.) in argument definition"))
         else:
-            self.errors.append(self.toString(node, f"Function '{node.name}' is missing a docstring."))
+            self.errors.append(self.toString(node, f"'{node.name}' is missing a docstring."))
 
     def visit_Name(self, node: ast) -> None:
-        """Visit a Name node
+        """Visit a Name node.
 
         Args:
             node (ast): the node to visit

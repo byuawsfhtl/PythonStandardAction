@@ -22,6 +22,10 @@ As a lab, certain standards have been generally adopted, but have had a hard tim
 
 8. Class names must be in pascal case (ex. ExampleClass)
 
+9. First line of docstring must end with period
+
+10. Classes must have a docstring
+
 ## Adding action to your workflow
 
 This action is best used in the same section as the meds action. Just add it as another step like the following.
