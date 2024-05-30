@@ -5,7 +5,8 @@ on:
     branches: [prd]
 
 jobs:
-    deploy:
+    standardCheck:
+        name: Python Standard Check
         runs-on: ubuntu-latest
         steps:
           - name: Follow Python Standard
