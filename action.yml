@@ -1,0 +1,16 @@
+name: "Python Standard Checker"
+description: "Checks Python files for code standards"
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout code 
+      uses: actions/checkout@v2
+    
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: "3.12"
+    
+    - name: Run Check
+      shell: bash
+      run: python StandardCheck.py
