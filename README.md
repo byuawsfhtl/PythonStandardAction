@@ -27,7 +27,7 @@ This action is best used in the same section as the meds action. Just add it as 
 ```github
         steps:
             - name: Follow Python Standard
-              uses: byuawsfhtl/PythonStandardAction@v1.0.0
+              uses: byuawsfhtl/PythonStandardAction@v1.0.1
 ```
 
 ## Excluding files from the check
