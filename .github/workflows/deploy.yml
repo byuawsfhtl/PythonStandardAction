@@ -9,4 +9,4 @@ jobs:
         runs-on: ubuntu-latest
         steps:
           - name: Follow Python Standard
-            uses: byuawsfhtl/PythonStandardAction@v1.0.1
+            uses: byuawsfhtl/PythonStandardAction@v1.0.2
