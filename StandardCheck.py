@@ -117,7 +117,7 @@ class CodeChecker(ast.NodeVisitor):
         if not self.isValidFormat(node.name):
             self.errors.append(self.toString(node, f"Function '{node.name}'  is not in camel case."))
 
-        if '__' in node.name and node.name not in self.special_methods:
+        if '__' in node.name and node.name not in self.special_methods and node.name not in self.itemsToIgnore:
             self.errors.append(self.toString(node, f"Function '{node.name}'  uses '__' inappropriately."))
 
         for arg in node.args.args:
@@ -200,7 +200,7 @@ class CodeChecker(ast.NodeVisitor):
             node (ast): the node to visit
         """
         if isinstance(node.ctx, (ast.Store, ast.Param)):
-            if '__' in node.id and node.id not in self.special_methods:
+            if '__' in node.id and node.id not in self.special_methods and node.id not in self.itemsToIgnore:
                 self.errors.append(self.toString(node, f"Variable '{node.id}'  uses '__' inappropriately."))
             if not self.isValidFormat(node.id):
                 self.errors.append(self.toString(node, f"Variable '{node.id}' is not in camel case."))
