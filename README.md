@@ -8,7 +8,7 @@ As a lab, certain standards have been generally adopted, but have had a hard tim
 
 1. Camel case is enforced on all function and variable name.
 
-2. The use of __ or name mangling is disallowed.
+2. The use of \_\_ or name mangling is disallowed.
 
 3. Docstring argument definitions must not start with a capital letter and must not use a period at the end. To indicate additional information in a sentence like format, use semicolons to separate sections. The first letters of these sections can also not be capitalized.
 
@@ -26,6 +26,20 @@ As a lab, certain standards have been generally adopted, but have had a hard tim
 
 10. Classes must have a docstring
 
+11. Function rguments must be documented in a section started with `Args: \n`
+
+12. Docstring argument type must be up to date with the function arguments' type annotations
+
+13. Docstring argument names must be up to date with the function arguments' names
+
+14. When specifying a docstring arguments type, if the argument has a default, the type must be followed with `, optional`
+
+15. Argument defaults must be documented in the `Args: ` section in a section of their corresponding arguments saying `defaults to {default value}`
+
+16. A function's return type must be documented in a section started with `Returns: \n`
+
+17. A function's return type must be exactly equal to the documented type
+
 ## Adding action to your workflow
 
 This action is best used in the same section as the meds action. Just add it as another step like the following.
@@ -33,7 +47,7 @@ This action is best used in the same section as the meds action. Just add it as 
 ```github
         steps:
             - name: Follow Python Standard
-              uses: byuawsfhtl/PythonStandardAction@v1.0.7
+              uses: byuawsfhtl/PythonStandardAction@v1.1.0
 ```
 
 ## Excluding files from the check
@@ -59,6 +73,7 @@ Using the `.standardignore` file specified in the section above, specific functi
 The syntax to do so is the use of the `!` before the name of the variable/function to ignore.
 
 For example
+
 ```cmd
 !sleep_for_retry
 ```
@@ -66,4 +81,5 @@ For example
 The above example ignores the sleep_for_retry function when applying standards as the name is required as it is an overwrite of an outside modules functionality.
 
 ## Running locally so you don't have to wait on github actions
+
 There isn't a way to do this yet
