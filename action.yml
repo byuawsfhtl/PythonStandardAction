@@ -3,14 +3,14 @@ description: "Checks Python files for code standards"
 runs:
   using: "composite"
   steps:
-    - name: Checkout code 
-      uses: actions/checkout@v2
-    
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: "3.12"
-    
+
     - name: Run Check
       shell: bash
       run: python ${{ github.action_path }}/StandardCheck.py
