@@ -277,7 +277,8 @@ class CodeChecker(ast.NodeVisitor):
 
         funcReturnType = funcReturnType.replace(" ", "")
         if funcReturnType != returnType:
-            self.errors.append(self.toString(node, f"return type for '{node.name}' does not match with function return type"))
+            self.errors.append(self.toString(node, 
+                f"the documentation of the return type ({returnType}) does not match with function return type ({funcReturnType})"))
 
     def docstringDescriptionCheck(self, node: ast, section: str) -> None:
         """Ensures the description string is up to snuff.
@@ -391,13 +392,13 @@ class CodeChecker(ast.NodeVisitor):
                 functionArgEndRow = arg.end_lineno
                 correspondingDefault = self._getArgDefault(node, functionArgEndCol, functionArgEndRow)
                 if definedType is None:
-                    self.errors.append(self.toString(node, f"type for arg '{argName}' could not be constructed for '{node.name}'"))
+                    self.errors.append(self.toString(node, f"type for arg '{argName}' could not be constructed"))
                     break
                 if correspondingDefault is not None:
                     definedType += ", optional"
                 definedType = definedType.replace(" ", "")
                 if definedType != argType:
-                    self.errors.append(self.toString(node, f"type for arg '{argName}' does not match with '{node.name}' argument definition"))
+                    self.errors.append(self.toString(node, f"type for arg '{argName} ({argType})' in documentation does not match with '{argName} ({definedType})' definition"))
                 break
 
             if functionArgEndCol != -1:
@@ -446,12 +447,12 @@ class CodeChecker(ast.NodeVisitor):
                     else:
                         defaultValue = correspondingDefault.value
                     if str(defaultValue) not in section:
-                        self.errors.append(self.toString(node, f"the default value for arg '{argName}' is not reflected in the docstring"))
+                        self.errors.append(self.toString(node, f"the default value '({str(defaultValue)})' for arg '{argName}' is not reflected in the docstring"))
                 else:
                     self.errors.append(self.toString(node, f"contains default documentation for arg '{argName}' which has no default"))
 
         if not foundDefault and correspondingDefault is not None:
-            self.errors.append(self.toString(node, f"the default value for arg '{argName}' is not reflected in the docstring"))
+            self.errors.append(self.toString(node, f"the default value '{str(correspondingDefault.value)}' for arg '{argName}' is not reflected in the docstring"))
     
     def _getArgDefault(self, node: ast.FunctionDef, endColOfArg: int, endRowOfArg: int) -> ast.Constant | None:
         """Finds a corresponding default using the end point of the argument wanted.
@@ -498,6 +499,8 @@ class CodeChecker(ast.NodeVisitor):
         if isinstance(annotation, ast.Subscript):
             outside = annotation.value.id
             return outside + "[" +  self._getDefinedType(annotation.slice) + "]"
+        if isinstance(annotation, ast.Constant):
+            return str(annotation.value)
         if isinstance(annotation, ast.Attribute) or isinstance(annotation, ast.Name):
             return self._getTypeFromAttributeOrName(annotation)
         
