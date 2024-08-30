@@ -476,7 +476,7 @@ class CodeChecker(ast.NodeVisitor):
                 return default
         return None
     
-    def _getDefinedType(self, annotation: ast.BinOp | ast.Attribute | ast.Name) -> str:
+    def _getDefinedType(self, annotation: ast.BinOp | ast.Attribute | ast.Name | ast.List | ast.Subscript) -> str:
         """Iterates through an ast arg to create its full definition.
 
         Args:
@@ -491,18 +491,24 @@ class CodeChecker(ast.NodeVisitor):
             leftDefinedType = self._getDefinedType(leftAnnotation)
             rightDefinedType = self._getDefinedType(rightAnnotation)
             return str(leftDefinedType) + "|" + str(rightDefinedType)
-        if isinstance(annotation, ast.Tuple):
+        elif isinstance(annotation, ast.Tuple):
             innerTypes = []
             for element in annotation.elts:
                 innerTypes.append(self._getDefinedType(element))
             return ", ".join(innerTypes)
-        if isinstance(annotation, ast.Subscript):
+        elif isinstance(annotation, ast.Subscript):
             outside = annotation.value.id
             return outside + "[" +  self._getDefinedType(annotation.slice) + "]"
-        if isinstance(annotation, ast.Constant):
+        elif isinstance(annotation, ast.Constant):
             return str(annotation.value)
-        if isinstance(annotation, ast.Attribute) or isinstance(annotation, ast.Name):
+        elif isinstance(annotation, ast.Attribute) or isinstance(annotation, ast.Name):
             return self._getTypeFromAttributeOrName(annotation)
+        elif isinstance(annotation, ast.List):
+            types = []
+            for elt in annotation.elts:
+                types.append(self._getDefinedType(elt)) # type: ignore
+            return "[" + ",".join(types) + "]"
+        
         
     def _getTypeFromAttributeOrName(self, annotation: ast.Attribute | ast.Name) -> str:
         """Reconstructs the full type name from the given annotation.
