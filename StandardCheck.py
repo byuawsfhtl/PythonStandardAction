@@ -32,6 +32,10 @@ class CodeChecker(ast.NodeVisitor):
             '__enter__', '__exit__', '__await__', '__aiter__', '__anext__', '__aenter__', '__aexit__',
             '__version__', '__new__'
         }
+        self.pytest_methods = {
+            'setup_module', 'teardown_module', 'setup_class', 'teardown_class',
+            'setup_method', 'teardown_method', 'setup_function', 'teardown_function'
+        }
         self.itemsToIgnore = self.loadItemsToIgnore('.standardignore')
         self.specialVariables = [
             "self",
@@ -71,15 +75,23 @@ class CodeChecker(ast.NodeVisitor):
             return True
         if name[0] == "_":
             return True
-        if "_" in name:
+        if "_" in name and type != "testFunction":
             for side in name.split("_"):
                 for char in side:
                     if not char.isupper():
                         return False
             return True
-        if type:
+        if type == "class":
             return self.isPascalCase(name)
-        return self.isCamelCase(name)
+        elif type == "testFunction":
+            if name.startswith("test_"):
+                return self.isTestFunctionCase(name)
+            elif name in self.pytest_methods:
+                return True
+            else:
+                return self.isCamelCase(name)
+        else:
+            return self.isCamelCase(name)
     
     def isCamelCase(self, name: str) -> bool:
         """Check if a name is in camel case.
@@ -90,8 +102,19 @@ class CodeChecker(ast.NodeVisitor):
         Returns:
             bool: true if the name is in camel case, False otherwise
         """
-        return re.match(r'^[a-z0-9]+(?:[A-Z][a-z0-9]*)*$', name) is not None
-    
+        return re.fullmatch(r'^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]*)*$', name) is not None
+
+    def isTestFunctionCase(self, name: str) -> bool:
+        """Check if a name follows the test function naming format.
+
+        Args:
+            name (str): the name to check
+
+        Returns:
+            bool: true if the name follows the test function naming format, False otherwise
+        """
+        return re.fullmatch(r'^test_[a-z][a-zA-Z0-9]*(?:_[a-z][a-zA-Z0-9]*)?$', name) is not None
+
     def isPascalCase(self, name: str) -> bool:
         """Check if a name is in pascal case.
 
@@ -101,7 +124,7 @@ class CodeChecker(ast.NodeVisitor):
         Returns:
             bool: true if the name is in pascal case, False otherwise
         """
-        return re.match(r'^[A-Z][A-Za-z0-9]+(?:[A-Z][a-z0-9]*)*$', name) is not None
+        return re.fullmatch(r'^[A-Z][A-Za-z0-9]+(?:[A-Z][a-z0-9]*)*$', name) is not None
 
     def toString(self, node: ast.FunctionDef | ast.ClassDef, message: str) -> str:
         """Converts a node and a message to a string.
@@ -127,8 +150,12 @@ class CodeChecker(ast.NodeVisitor):
         # Skip special methods
         self.verifyDocstring(node)
 
-        if not self.isValidFormat(node.name):
-            self.errors.append(self.toString(node, f"Function '{node.name}'  is not in camel case."))
+        functionType = "testFunction" if "/tests/" in self.filename else None
+        if not self.isValidFormat(node.name, type=functionType):
+            if (functionType == "testFunction" and node.name.startswith("test_")) or node.name in self.pytest_methods:
+                self.errors.append(self.toString(node, f"Function '{node.name}'  is not in test function case."))
+            else:
+                self.errors.append(self.toString(node, f"Function '{node.name}'  is not in camel case."))
 
         if NAME_MANGLE in node.name and node.name not in self.special_methods and node.name not in self.itemsToIgnore:
             self.errors.append(self.toString(node, f"Function '{node.name}'  uses '{NAME_MANGLE}' inappropriately."))
@@ -191,6 +218,7 @@ class CodeChecker(ast.NodeVisitor):
 
         argSectionFound = False
         returnSectionFound = False
+        yieldSectionFound = False
 
         for i in range(1, len(splitDocstring)):
             section = splitDocstring[i]
@@ -199,6 +227,9 @@ class CodeChecker(ast.NodeVisitor):
                 self.docstringArgSection(node, section)
             if "Returns:" in section:
                 returnSectionFound = True
+                self.docstringReturnSection(node, section)
+            if "Yields:" in section:
+                yieldSectionFound = True
                 self.docstringReturnSection(node, section)
 
         if isinstance(node, ast.FunctionDef):
@@ -212,7 +243,7 @@ class CodeChecker(ast.NodeVisitor):
                 self.errors.append(self.toString(node, "arguments not documented in docstring"))
 
             returnType = self._getDefinedType(node.returns)
-            if returnType and not returnSectionFound and str(returnType) != "None":
+            if returnType and not returnSectionFound and not yieldSectionFound and str(returnType) != "None":
                 self.errors.append(self.toString(node, "return type not documented in docstring"))
 
     def docstringArgSection(self, node: ast.ClassDef | ast.FunctionDef, section: str) -> None:
@@ -480,7 +511,7 @@ class CodeChecker(ast.NodeVisitor):
         """Iterates through an ast arg to create its full definition.
 
         Args:
-            annotation (ast.BinOp | ast.Attribute | ast.Name): the arguement to get the specified type of
+            annotation (ast.BinOp | ast.Attribute | ast.Name | ast.List | ast.Subscript): the argument to get the specified type of
 
         Returns:
             str: the full type
