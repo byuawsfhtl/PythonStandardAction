@@ -3,647 +3,572 @@ import fnmatch
 import os
 import re
 import sys
+from typing import List, Dict, Any, Optional, Tuple, Callable
+from dataclasses import dataclass
+from pathlib import Path
+import importlib.util
 
-ITEMS_TO_IGNORE_SYMBOL = "!"
-COMMENT_SYMBOL = "#"
-NAME_MANGLE = "__"
-
-class CodeChecker(ast.NodeVisitor):
-    """Class to check Python code for formatting issues."""
-
-    def __init__(self, filename: str) -> None:
-        """Initializes the CodeChecker class.
-
-        Args:
-            filename (str): the current file being checked
-        """
-        self.errors = []
-        self.filename = filename
-        self.special_methods = {
-            '__init__', '__del__', '__repr__', '__str__', '__bytes__', '__format__', '__lt__',
-            '__le__', '__eq__', '__ne__', '__gt__', '__ge__', '__hash__', '__bool__', '__call__',
-            '__len__', '__getitem__', '__setitem__', '__delitem__', '__iter__', '__next__',
-            '__reversed__', '__contains__', '__add__', '__sub__', '__mul__', '__matmul__',
-            '__truediv__', '__floordiv__', '__mod__', '__divmod__', '__pow__', '__lshift__',
-            '__rshift__', '__and__', '__xor__', '__or__', '__iadd__', '__isub__', '__imul__',
-            '__imatmul__', '__itruediv__', '__ifloordiv__', '__imod__', '__ipow__', '__ilshift__',
-            '__irshift__', '__iand__', '__ixor__', '__ior__', '__neg__', '__pos__', '__abs__',
-            '__invert__', '__complex__', '__int__', '__float__', '__round__', '__index__',
-            '__enter__', '__exit__', '__await__', '__aiter__', '__anext__', '__aenter__', '__aexit__',
-            '__version__', '__new__'
-        }
-        self.pytest_methods = {
-            'setup_module', 'teardown_module', 'setup_class', 'teardown_class',
-            'setup_method', 'teardown_method', 'setup_function', 'teardown_function'
-        }
-        self.itemsToIgnore = self.loadItemsToIgnore('.standardignore')
-        self.specialVariables = [
-            "self",
-            "cls",
-            "*args",
-            "**kwargs"
-        ]
-
-    def loadItemsToIgnore(self, ignoreFile: str) -> list:
-        """Load items to ignore from a file.
-
-        Args:
-            ignoreFile (str): the file to load items from
-
-        Returns:
-            list: the items to ignore
-        """
-        ignoreItems = []
-        if os.path.exists(ignoreFile):
-            with open(ignoreFile, 'r', encoding='utf-8') as file:
-                ignoreItems = [line.strip().strip(ITEMS_TO_IGNORE_SYMBOL) for line in file if line.strip() and line.startswith(ITEMS_TO_IGNORE_SYMBOL)]
-        return ignoreItems
-
-    def isValidFormat(self, name: str, type: str | None = None) -> bool:
-        """Check if a name is in camel case or other valid format.
-
-        Args:
-            name (str): the name to check
-            type (str | None, optional): the type of name to check; defaults to None
-
-        Returns:
-            bool: true if the name is in camel case or other valid format, False otherwise
-        """
-        if name in self.itemsToIgnore:
-            return True
-        if all(char.isupper() for char in name):
-            return True
-        if name[0] == "_":
-            return True
-        if "_" in name and type != "testFunction":
-            for side in name.split("_"):
-                for char in side:
-                    if not char.isupper():
-                        return False
-            return True
-        if type == "class":
-            return self.isPascalCase(name)
-        elif type == "testFunction":
-            if name.startswith("test_"):
-                return self.isTestFunctionCase(name)
-            elif name in self.pytest_methods:
-                return True
-            else:
-                return self.isCamelCase(name)
-        else:
-            return self.isCamelCase(name)
+@dataclass
+class CodeError:
+    """Represents a code formatting error."""
+    filename: str
+    line_number: int
+    function_name: Optional[str]
+    message: str
     
-    def isCamelCase(self, name: str) -> bool:
-        """Check if a name is in camel case.
+    def __str__(self) -> str:
+        function_part = f"Function {self.function_name}: " if self.function_name else ""
+        return f"{self.filename}:{self.line_number}: {function_part}{self.message}"
 
-        Args:
-            name (str): the name to check
+@dataclass
+class IgnoreRule:
+    """Represents a rule for ignoring specific standards in specific locations."""
+    standard_type: str  # e.g., 'naming', 'docstring', 'type_annotation'
+    location_type: str  # e.g., 'function', 'class', 'variable'
+    location_path: str  # e.g., 'MyClass.my_method', 'global.my_variable'
+    specific_name: Optional[str] = None  # specific item name to ignore
 
-        Returns:
-            bool: true if the name is in camel case, False otherwise
-        """
-        return re.fullmatch(r'^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]*)*$', name) is not None
+# Standard sets for reference
+SPECIAL_METHODS = {
+    '__init__', '__del__', '__repr__', '__str__', '__bytes__', '__format__', '__lt__',
+    '__le__', '__eq__', '__ne__', '__gt__', '__ge__', '__hash__', '__bool__', '__call__',
+    '__len__', '__getitem__', '__setitem__', '__delitem__', '__iter__', '__next__',
+    '__reversed__', '__contains__', '__add__', '__sub__', '__mul__', '__matmul__',
+    '__truediv__', '__floordiv__', '__mod__', '__divmod__', '__pow__', '__lshift__',
+    '__rshift__', '__and__', '__xor__', '__or__', '__iadd__', '__isub__', '__imul__',
+    '__imatmul__', '__itruediv__', '__ifloordiv__', '__imod__', '__ipow__', '__ilshift__',
+    '__irshift__', '__iand__', '__ixor__', '__ior__', '__neg__', '__pos__', '__abs__',
+    '__invert__', '__complex__', '__int__', '__float__', '__round__', '__index__',
+    '__enter__', '__exit__', '__await__', '__aiter__', '__anext__', '__aenter__', '__aexit__',
+    '__version__', '__new__'
+}
 
-    def isTestFunctionCase(self, name: str) -> bool:
-        """Check if a name follows the test function naming format.
+PYTEST_METHODS = {
+    'setup_module', 'teardown_module', 'setup_class', 'teardown_class',
+    'setup_method', 'teardown_method', 'setup_function', 'teardown_function'
+}
 
-        Args:
-            name (str): the name to check
+SPECIAL_VARIABLES = {'self', 'cls', '*args', '**kwargs'}
 
-        Returns:
-            bool: true if the name follows the test function naming format, False otherwise
-        """
-        return re.fullmatch(r'^test_[a-z][a-zA-Z0-9]*(?:_[a-z][a-zA-Z0-9]*)?$', name) is not None
+# Validation functions
+def is_snake_case(name: str) -> bool:
+    """Check if a name follows snake_case convention."""
+    return re.fullmatch(r'^[a-z][a-z0-9_]*$', name) is not None
 
-    def isPascalCase(self, name: str) -> bool:
-        """Check if a name is in pascal case.
+def is_pascal_case(name: str) -> bool:
+    """Check if a name follows PascalCase convention."""
+    return re.fullmatch(r'^[A-Z][A-Za-z0-9]*$', name) is not None
 
-        Args:
-            name (str): the name to check
+def is_screaming_snake_case(name: str) -> bool:
+    """Check if a name follows SCREAMING_SNAKE_CASE convention."""
+    return re.fullmatch(r'^[A-Z][A-Z0-9_]*$', name) is not None
 
-        Returns:
-            bool: true if the name is in pascal case, False otherwise
-        """
-        return re.fullmatch(r'^[A-Z][A-Za-z0-9]+(?:[A-Z][a-z0-9]*)*$', name) is not None
+def is_test_function_case(name: str) -> bool:
+    """Check if a name follows test function naming convention."""
+    return re.fullmatch(r'^test_[a-z][a-z0-9_]*$', name) is not None
 
-    def toString(self, node: ast.FunctionDef | ast.ClassDef, message: str) -> str:
-        """Converts a node and a message to a string.
+def is_valid_variable_name(name: str, is_test_file: bool = False) -> bool:
+    """Check if a variable name is valid according to our standards."""
+    if name in SPECIAL_VARIABLES:
+        return True
+    if name.startswith('_'):
+        return True
+    if is_screaming_snake_case(name):  # Constants
+        return True
+    return is_snake_case(name)
 
-        Args:
-            node (ast.FunctionDef | ast.ClassDef): the node to get the line number from
-            message (str): the message to display
+def is_valid_function_name(name: str, is_test_file: bool = False) -> bool:
+    """Check if a function name is valid according to our standards."""
+    if name in SPECIAL_METHODS:
+        return True
+    if name in PYTEST_METHODS:
+        return True
+    if is_test_file and name.startswith('test_'):
+        return is_test_function_case(name)
+    return is_snake_case(name)
 
-        Returns:
-            str: the formatted string
-        """
-        functionMsg = ""
-        if isinstance(node, ast.FunctionDef):
-            functionMsg = f"Function {node.name}: "
-        return f"{self.filename}:{node.lineno}: {functionMsg}{message}"
+def is_valid_class_name(name: str) -> bool:
+    """Check if a class name is valid according to our standards."""
+    return is_pascal_case(name)
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Visit a FunctionDef node.
-
-        Args:
-            node (ast.FunctionDef): the node to visit
-        """
-        # Skip special methods
-        self.verifyDocstring(node)
-
-        functionType = "testFunction" if "/tests/" in self.filename else None
-        if not self.isValidFormat(node.name, type=functionType):
-            if (functionType == "testFunction" and node.name.startswith("test_")) or node.name in self.pytest_methods:
-                self.errors.append(self.toString(node, f"Function '{node.name}'  is not in test function case."))
-            else:
-                self.errors.append(self.toString(node, f"Function '{node.name}'  is not in camel case."))
-
-        if NAME_MANGLE in node.name and node.name not in self.special_methods and node.name not in self.itemsToIgnore:
-            self.errors.append(self.toString(node, f"Function '{node.name}'  uses '{NAME_MANGLE}' inappropriately."))
-
-        for arg in node.args.args:
-            if arg.annotation is None and arg.arg not in self.specialVariables and '*' not in arg.arg and '**' not in arg.arg:
-                self.errors.append(self.toString(node, f"Function '{node.name}'  has parameter '{arg.arg}' without type annotation."))
-
-            if not self.isValidFormat(arg.arg):
-                self.errors.append(self.toString(node, f"Function '{node.name}'  has parameter '{arg.arg}' that is not in camel case."))
-
-        for default in node.args.defaults:
-            if isinstance(default, ast.Dict) or isinstance(default, ast.List) or isinstance(default, ast.Set):
-                self.errors.append(self.toString(node, f"Function '{node.name}' has a mutable default argument."))
-
-        # Check for return type annotation
-        if node.returns is None:
-            self.errors.append(self.toString(node, f"Function '{node.name}'  is missing a return type annotation."))
-        
-        self.generic_visit(node)
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        """Visit a ClassDef node.
-
-        Args:
-            node (ast.ClassDef): the node to visit
-        """
-        if not self.isValidFormat(node.name, type='class'):
-            self.errors.append(self.toString(node, f"Class '{node.name}' is not in Pascal case."))
-        self.verifyDocstring(node)
-        self.generic_visit(node)
-
-    def visit_Name(self, node: ast) -> None:
-        """Visit a Name node.
-
-        Args:
-            node (ast): the node to visit
-        """
-        if isinstance(node.ctx, (ast.Store, ast.Param)):
-            if NAME_MANGLE in node.id and node.id not in self.special_methods and node.id not in self.itemsToIgnore:
-                self.errors.append(self.toString(node, f"Variable '{node.id}'  uses '{NAME_MANGLE}' inappropriately."))
-            if not self.isValidFormat(node.id):
-                self.errors.append(self.toString(node, f"Variable '{node.id}' is not in camel case."))
-        self.generic_visit(node)
-
-    def verifyDocstring(self, node: ast.FunctionDef | ast.ClassDef) -> None:
-        """Check the docstring of a node.
-
-        Args:
-            node (ast.FunctionDef | ast.ClassDef): the node to check
-        """
-        docstring = ast.get_docstring(node)
-        if not docstring:
-            self.errors.append(self.toString(node, f"'{node.name}' is missing a docstring."))
-            return
-        
-        splitDocstring = docstring.split("\n\n")
-        description = splitDocstring[0]
-        self.docstringDescriptionCheck(node, description)
-
-        argSectionFound = False
-        returnSectionFound = False
-        yieldSectionFound = False
-
-        for i in range(1, len(splitDocstring)):
-            section = splitDocstring[i]
-            if "Args:" in section:
-                argSectionFound = True
-                self.docstringArgSection(node, section)
-            if "Returns:" in section:
-                returnSectionFound = True
-                self.docstringReturnSection(node, section)
-            if "Yields:" in section:
-                yieldSectionFound = True
-                self.docstringReturnSection(node, section)
-
-        if isinstance(node, ast.FunctionDef):
-            args = node.args.args
-            filteredArgs = []
-            for arg in args:
-                if arg.arg not in self.specialVariables:
-                    filteredArgs.append(arg)
-
-            if not argSectionFound and len(filteredArgs) > 0:
-                self.errors.append(self.toString(node, "arguments not documented in docstring"))
-
-            returnType = self._getDefinedType(node.returns)
-            if returnType and not returnSectionFound and not yieldSectionFound and str(returnType) != "None":
-                self.errors.append(self.toString(node, "return type not documented in docstring"))
-
-    def docstringArgSection(self, node: ast.ClassDef | ast.FunctionDef, section: str) -> None:
-        """Ensures the argument section is accurate.
-
-        Args:
-            node (ast.ClassDef | ast.FunctionDef): the current node for the docstring
-            section (str): the argument section to evaluate
-        """
-        if not isinstance(node, ast.FunctionDef):
-            self.errors.append(self.toString(node, f"Args Section found for non function: '{node.name}'"))
-            return
-        
-        while "  " in section:
-            section = section.replace("  ", " ")
-        section = section.strip()
-
-        argLines = self._parseArgLines(section)
-
-        if not argLines:
-            self.errors.append(self.toString(node, f"Function '{node.name}' docstring Args section is empty"))
-            return
-
-        docArgs = self._verifyArgLines(node, argLines)
-        
-        self._verifyFuncArgsInDoc(node, docArgs)
-
-    def docstringReturnSection(self, node: ast.ClassDef | ast.FunctionDef, section: str) -> None:
-        """Ensures the return section is accurate.
-
-        Args:
-            node (ast.ClassDef | ast.FunctionDef): the current node for the docstring
-            section (str): the return section to evaluate
-        """
-        if not isinstance(node, ast.FunctionDef):
-            self.errors.append(self.toString(node, f"Args Section found for non function: '{node.name}'"))
-            return
-        
-        while "  " in section:
-            section = section.replace("  ", " ")
-        section = section.strip()
-
-        splitReturnSection = section.split("\n")
-        if len(splitReturnSection) < 2:
-            self.errors.append(self.toString(node, f"'{node.name}' docstring return section is missing"))
-            return
-        
-        returnLine = splitReturnSection[1]
-        returnLineSplit = returnLine.split(":")
-        if len(returnLineSplit) < 2:
-            self.errors.append(self.toString(node, f"'{node.name}' docstring return section is missing a type definition"))
-            return
-        
-        returnType = returnLineSplit[0]
-        returnType = returnType.strip()
-        returnType = returnType.replace(" ", "")
-
-        funcReturnType = self._getDefinedType(node.returns)
-        if funcReturnType is None:
-            self.errors.append(self.toString(node, f"return type for '{node.name}' either is not defined or could not be constructed"))
-            return
-
-        funcReturnType = funcReturnType.replace(" ", "")
-        if funcReturnType != returnType:
-            self.errors.append(self.toString(node, 
-                f"the documentation of the return type ({returnType}) does not match with function return type ({funcReturnType})"))
-
-    def docstringDescriptionCheck(self, node: ast, section: str) -> None:
-        """Ensures the description string is up to snuff.
-
-        Args:
-            node (ast): the current node being checked
-            section (str): the description string to check
-        """
-        # Rules: Must begin with a Capital and end with a period
-        section = section.strip()
-        section = section.replace("\n", " ")
-        section = section.replace("\t", " ")
-        while "  " in section:
-            section = section.replace("  ", " ")
-        section = section.strip()
-        
-        if not section:
-            self.errors.append(self.toString(node, f"'{node.name}' docstring description is missing"))
-            return
-        
-        firstLetter = section[0]
-        if firstLetter.isalpha() and firstLetter.capitalize() != firstLetter:
-            self.errors.append(self.toString(node, f"'{node.name}' docstring description must begin with a capital letter"))
-        
-        if not section.endswith("."):
-            self.errors.append(self.toString(node, f"'{node.name}' docstring description must end with a period"))
-
-    def _docArgExists(self, docArgName: str, argList: list[ast.arg]) -> bool:
-        """Checks if the docstring argument exists in the function argument list.
-
-        Args:
-            docArgName (str): the name to check for
-            argList (list[ast.arg]): the function argument list
-
-        Returns:
-            bool: True if the arg exists, False otherwise
-        """
-        for arg in argList:
-            if arg.arg == docArgName:
-                return True
-        return False
+# Ignore system functions
+def load_ignore_config(ignore_file: str = '.standardignore.py') -> Dict[str, Any]:
+    """Load ignore configuration from Python file."""
+    if not os.path.exists(ignore_file):
+        return {}
     
-    def _parseArgLines(self, section: str) -> list[str]:
-        """Parse out the argument descriptions from the docstring.
-
-        Args:
-            section (str): the section to parse args from
-
-        Returns:
-            list[str]: the parsed arg lines
-        """
-        splitArgsSection = section.split("\n")
-        if len(splitArgsSection) < 2:
-            return
-        
-        argLines = []
-        index = 1
-        while index < len(splitArgsSection):
-            currentLine = splitArgsSection[index]
-            if "):" not in currentLine:
-                return
-
-            additionalLineJump = 0
-            if (index + 1) < len(splitArgsSection):
-                tempIndex = index + 1
-                while tempIndex < len(splitArgsSection) and "):" not in splitArgsSection[tempIndex]:
-                    currentLine += splitArgsSection[tempIndex]
-                    tempIndex += 1
-                additionalLineJump = tempIndex - index
-            else:
-                additionalLineJump = 1
-
-            argLines.append(currentLine)
-            index += additionalLineJump
-        return argLines
-        
-    def _verifyArgLines(self, node: ast, argLines: list[str]) -> list[str]:
-        """Verifies that argument definitions from docstring are valid.
-
-        Args:
-            node (ast): the current node
-            argLines (list[str]): the parsed lines of argument definitions
-
-        Returns:
-            list[str]: the names of the variables found
-        """
-        docArgs = []
-        functionArgs: list[ast.arg] = node.args.args
-        for argLine in argLines:
-            splitOnOpen = argLine.split(" (")
-            if len(splitOnOpen) == 1:
-                self.errors.append(self.toString(node, f"an argument in the docstring does not have a type definition"))
-                continue
-            argName: str = splitOnOpen[0]
-            argName = argName.strip()
-            docArgs.append(argName)
-            if not self._docArgExists(argName, functionArgs):
-                self.errors.append(self.toString(node, f"docstring arg '{argName}' does not appear in '{node.name}' arguments"))
-
-            midSplit = splitOnOpen[1].split("):")
-            argType: str = midSplit[0]
-            argType = argType.replace(" ", "")
-            functionArgEndCol = -1
-            correspondingDefault = None
-            # Match the current argument line in the docstring to its corresponding function argument type annotation
-            for arg in functionArgs:
-                if arg.arg != argName:
-                    continue
-                definedType = self._getDefinedType(arg.annotation)
-                functionArgEndCol = arg.end_col_offset
-                functionArgEndRow = arg.end_lineno
-                correspondingDefault = self._getArgDefault(node, functionArgEndCol, functionArgEndRow)
-                if definedType is None:
-                    self.errors.append(self.toString(node, f"type for arg '{argName}' could not be constructed"))
-                    break
-                if correspondingDefault is not None:
-                    definedType += ", optional"
-                definedType = definedType.replace(" ", "")
-                if definedType != argType:
-                    self.errors.append(self.toString(node, f"type for arg '{argName} ({argType})' in documentation does not match with '{argName} ({definedType})' definition"))
-                break
-
-            if functionArgEndCol != -1:
-                definitionSentence = midSplit[1]
-                if not definitionSentence:
-                    self.errors.append(self.toString(node, f"description sentence for arg '{argName}' not provided in docstring"))
-                
-                self._verifySections(node, definitionSentence, correspondingDefault, argName)
-
-        return docArgs
+    spec = importlib.util.spec_from_file_location(".standardignore", ignore_file)
+    if spec is None or spec.loader is None:
+        return {}
     
-    def _verifySections(self, node: ast.FunctionDef, definition: str, correspondingDefault: ast.Constant | None, argName: str) -> None:
-        """Verify that the descriptions of docstring arguments are accurate and follow standards.
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        return vars(module)
+    except:
+        return {}
 
-        Args:
-            node (ast.FunctionDef): the current node
-            definition (str): the definition string of current argument
-            correspondingDefault (ast.Constant | None): the default value for the current arguement
-            argName (str): the name of the current arguement
-        """
-        sectionSplit = definition.split(";")
-        foundDefault = False
-        for section in sectionSplit:
-            if not section:
-                self.errors.append(self.toString(node, f"empty section provided in documentation for arg '{argName}'"))
-                continue
-            
-            section = section.strip()
-            if section[0].capitalize() == section[0]:
-                self.errors.append(self.toString(node, f"capital letter in beginning of a section for documentation of arg '{argName}'"))
+def extract_ignore_rules_from_config(config: Dict[str, Any]) -> List[IgnoreRule]:
+    """Extract ignore rules from loaded configuration."""
+    rules = []
+    for attr_name, attr_value in config.items():
+        if attr_name.startswith('_') and isinstance(attr_value, dict):
+            continue
+        if not all(key in attr_value for key in ['standard_type', 'location_type', 'location_path']):
+            continue
+        rule = IgnoreRule(
+            standard_type=attr_value['standard_type'],
+            location_type=attr_value['location_type'],
+            location_path=attr_value['location_path'],
+            specific_name=attr_value.get('specific_name')
+        )
+        rules.append(rule)
+    return rules
 
-            if section.endswith("."):
-                self.errors.append(self.toString(node, f"section of documentation for arg '{argName}' ends with ."))
-
-            if ':' in section:
-                self.errors.append(self.toString(node, f"section of documentation for arg '{argName}' contains disallowed character ':'"))
-
-            if "defaults to" in section:
-                foundDefault = True
-                if correspondingDefault is not None:
-                    if isinstance(correspondingDefault, ast.UnaryOp):
-                        if isinstance(correspondingDefault.op, ast.USub):
-                            defaultValue = -1 * correspondingDefault.operand.value
-                        else:
-                            defaultValue = correspondingDefault.operand.value
-                    else:
-                        defaultValue = correspondingDefault.value
-                    if str(defaultValue) not in section:
-                        self.errors.append(self.toString(node, f"the default value '({str(defaultValue)})' for arg '{argName}' is not reflected in the docstring"))
-                else:
-                    self.errors.append(self.toString(node, f"contains default documentation for arg '{argName}' which has no default"))
-
-        if not foundDefault and correspondingDefault is not None:
-            self.errors.append(self.toString(node, f"the default value '{str(correspondingDefault.value)}' for arg '{argName}' is not reflected in the docstring"))
-    
-    def _getArgDefault(self, node: ast.FunctionDef, endColOfArg: int, endRowOfArg: int) -> ast.Constant | None:
-        """Finds a corresponding default using the end point of the argument wanted.
-
-        Args:
-            node (ast.FunctionDef): the current node
-            endColOfArg (int): the last column index of the argument to find the default for
-            endRowOfArg (int): the row index of the argument to find the default for
-
-        Returns:
-            ast.Constant | None: the found default, or None if none found
-        """
-        if endColOfArg == -1:
-            return None
-        defaults = node.args.defaults
-        for default in defaults:
-            defaultBegCol = default.col_offset
-            defaultEndRow = default.end_lineno
-            difference = defaultBegCol - endColOfArg
-            if (difference == 1 or difference == 3) and endRowOfArg == defaultEndRow:
-                return default
-        return None
-    
-    def _getDefinedType(self, annotation: ast.BinOp | ast.Attribute | ast.Name | ast.List | ast.Subscript) -> str:
-        """Iterates through an ast arg to create its full definition.
-
-        Args:
-            annotation (ast.BinOp | ast.Attribute | ast.Name | ast.List | ast.Subscript): the argument to get the specified type of
-
-        Returns:
-            str: the full type
-        """
-        if isinstance(annotation, ast.BinOp):
-            leftAnnotation = annotation.left
-            rightAnnotation = annotation.right
-            leftDefinedType = self._getDefinedType(leftAnnotation)
-            rightDefinedType = self._getDefinedType(rightAnnotation)
-            return str(leftDefinedType) + "|" + str(rightDefinedType)
-        elif isinstance(annotation, ast.Tuple):
-            innerTypes = []
-            for element in annotation.elts:
-                innerTypes.append(self._getDefinedType(element))
-            return ", ".join(innerTypes)
-        elif isinstance(annotation, ast.Subscript):
-            outside = annotation.value.id
-            return outside + "[" +  self._getDefinedType(annotation.slice) + "]"
-        elif isinstance(annotation, ast.Constant):
-            return str(annotation.value)
-        elif isinstance(annotation, ast.Attribute) or isinstance(annotation, ast.Name):
-            return self._getTypeFromAttributeOrName(annotation)
-        elif isinstance(annotation, ast.List):
-            types = []
-            for elt in annotation.elts:
-                types.append(self._getDefinedType(elt)) # type: ignore
-            return "[" + ",".join(types) + "]"
-        
-        
-    def _getTypeFromAttributeOrName(self, annotation: ast.Attribute | ast.Name) -> str:
-        """Reconstructs the full type name from the given annotation.
-
-        Args:
-            annotation (ast.Attribute | ast.Name): the annotation to pull the name from
-
-        Returns:
-            str: the full type name
-        """
-        definedType = []
-        while not isinstance(annotation, ast.Name):
-            definedType.append(annotation.attr)
-            annotation = annotation.value
-        else:
-            definedType.append(annotation.id)
-
-        returnType = ""
-        for i in range(len(definedType) - 1, -1, -1):
-            returnType += definedType[i]
-            if i != 0:
-                returnType += "."
-        return returnType
-
-    def _verifyFuncArgsInDoc(self, node: ast, docArgs: list[str]) -> None:
-        """Ensures that the variables defined in the node args appear in the docstring.
-
-        Args:
-            node (ast): the current function node
-            docArgs (list[str]): the arguments defined in the docstring
-        """
-        functionArgs: list[ast.arg] = node.args.args   
-        for functionArg in functionArgs:
-            functionArgName = functionArg.arg
-            if functionArgName not in docArgs and functionArgName not in self.specialVariables:
-                self.errors.append(self.toString(node, f"arguement '{functionArgName}' not documented"))
-
-def checkFile(filename: str) -> list:
-    """Check a file for formatting issues.
-
-    Args:
-        filename (str): the file to check
-
-    Returns:
-        list: the errors found
-    """
-    with open(filename, 'r', encoding='utf-8') as file:
-        tree = ast.parse(file.read(), filename)
-        checker = CodeChecker(filename)
-        checker.visit(tree)
-        return checker.errors
-    
-def loadIgnorePatterns(ignoreFile: str) -> list:
-    """Load ignore patterns from a file.
-
-    Args:
-        ignoreFile (str): the file to load patterns from
-
-    Returns:
-        list: the patterns to ignore
-    """
-    patterns = []
-    if os.path.exists(ignoreFile):
-        with open(ignoreFile, 'r', encoding='utf-8') as file:
-            patterns = [line.strip() for line in file if line.strip() and not line.startswith(COMMENT_SYMBOL) and not line.startswith(ITEMS_TO_IGNORE_SYMBOL)]
-    return patterns
-
-def shouldIgnore(filePath: str, patterns: list) -> bool:
-    """Check if a file should be ignored based on patterns.
-
-    Args:
-        filePath (str): the file to check
-        patterns (list): the patterns to check against
-
-    Returns:
-        bool: true if the file should be ignored, False otherwise
-    """    
-    for pattern in patterns:
-        if fnmatch.fnmatch(filePath, pattern):
-            return True
+def should_ignore_error(error_type: str, location_path: str, item_name: str, rules: List[IgnoreRule]) -> bool:
+    """Check if an error should be ignored based on ignore rules."""
+    for rule in rules:
+        if rule.standard_type != error_type:
+            continue
+        if rule.location_path not in location_path:
+            continue
+        if rule.specific_name is not None and rule.specific_name != item_name:
+            continue
+        return True
     return False
 
-def main() -> None:
-    """Main function to check all files in the current directory.
-    """
-    ignore = loadIgnorePatterns('.standardignore')
-    errors = []
-    for root, dirs, files in os.walk('.'):
-        dirs[:] = [d for d in dirs if not shouldIgnore(os.path.join(root, d), ignore)]
-        if shouldIgnore(root, ignore):
-            continue
-        for file in files:
-            if file.endswith('.py'):
-                filePath = os.path.join(root, file)
-                if shouldIgnore(filePath, ignore):
-                    continue
-                errors.extend(checkFile(filePath))
+def should_ignore_file(file_path: str, filename: str, config: Dict[str, Any]) -> bool:
+    """Check if an entire file should be ignored."""
+    # Check file patterns
+    ignore_patterns = config.get('ignore_file_patterns', [])
+    for pattern in ignore_patterns:
+        if fnmatch.fnmatch(file_path, pattern):
+            return True
     
-    if errors:
-        for error in errors:
+    # Check specific files
+    ignore_files = config.get('ignore_files', [])
+    if filename in ignore_files or file_path in ignore_files:
+        return True
+    
+    return False
+
+def get_location_path(context_stack: List[str]) -> str:
+    """Get the location path for a node (e.g., 'MyClass.my_method')."""
+    return '.'.join(context_stack) if context_stack else 'global'
+
+# Type annotation handling
+def extract_type_from_simple_node(node: ast.expr) -> str:
+    """Extract type from simple AST nodes."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Constant):
+        return repr(node.value)
+    return "Unknown"
+
+def extract_type_from_complex_node(node: ast.expr) -> str:
+    """Extract type from complex AST nodes."""
+    if isinstance(node, ast.Attribute):
+        return f"{extract_type_annotation(node.value)}.{node.attr}"
+    if isinstance(node, ast.Subscript):
+        return f"{extract_type_annotation(node.value)}[{extract_type_annotation(node.slice)}]"
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return f"{extract_type_annotation(node.left)} | {extract_type_annotation(node.right)}"
+    if isinstance(node, ast.Tuple):
+        elements = [extract_type_annotation(elt) for elt in node.elts]
+        return f"({', '.join(elements)})"
+    return "Unknown"
+
+def extract_type_annotation(annotation: Optional[ast.expr]) -> Optional[str]:
+    """Extract type annotation as string from AST node."""
+    if annotation is None:
+        return None
+    
+    # Try simple nodes first
+    simple_result = extract_type_from_simple_node(annotation)
+    if simple_result != "Unknown":
+        return simple_result
+    
+    # Handle complex nodes
+    return extract_type_from_complex_node(annotation)
+
+# Docstring validation functions
+def validate_docstring_description(description: str) -> List[str]:
+    """Validate docstring description format."""
+    issues = []
+    if not description:
+        issues.append("empty description")
+        return issues
+    
+    if not description[0].isupper():
+        issues.append("description must start with capital letter")
+    if not description.endswith('.'):
+        issues.append("description must end with period")
+    
+    return issues
+
+def validate_docstring_format(docstring: str) -> List[str]:
+    """Validate docstring format and return list of issues."""
+    if not docstring:
+        return ["missing docstring"]
+    
+    lines = docstring.strip().split('\n')
+    description = lines[0].strip()
+    return validate_docstring_description(description)
+
+# Function checking functions
+def check_function_naming(node: ast.FunctionDef, filename: str, location_path: str, ignore_rules: List[IgnoreRule]) -> Optional[CodeError]:
+    """Check function naming conventions."""
+    if should_ignore_error('naming', location_path, node.name, ignore_rules):
+        return None
+    
+    is_test_file = '/tests/' in filename or filename.endswith('_test.py')
+    if is_valid_function_name(node.name, is_test_file):
+        return None
+    
+    return CodeError(
+        filename, node.lineno, node.name,
+        f"Function '{node.name}' does not follow naming convention"
+    )
+
+def check_function_name_mangling(node: ast.FunctionDef, filename: str, location_path: str,ignore_rules: List[IgnoreRule]) -> Optional[CodeError]:
+    """Check for inappropriate name mangling."""
+    if '__' not in node.name or node.name in SPECIAL_METHODS:
+        return None
+    
+    if should_ignore_error('name_mangling', location_path, node.name, ignore_rules):
+        return None
+    
+    return CodeError(
+        filename, node.lineno, node.name,
+        f"Function '{node.name}' uses inappropriate name mangling"
+    )
+
+def check_parameter_naming(arg: ast.arg, node: ast.FunctionDef, filename: str, location_path: str, ignore_rules: List[IgnoreRule]) -> Optional[CodeError]:
+    """Check parameter naming convention."""
+    if arg.arg in SPECIAL_VARIABLES:
+        return None
+    
+    param_location = f"{location_path}.{arg.arg}"
+    if should_ignore_error('naming', param_location, arg.arg, ignore_rules):
+        return None
+    
+    if is_valid_variable_name(arg.arg):
+        return None
+    
+    return CodeError(
+        filename, node.lineno, node.name,
+        f"Parameter '{arg.arg}' does not follow naming convention"
+    )
+
+def check_parameter_type_annotation(arg: ast.arg, node: ast.FunctionDef, filename: str, location_path: str, ignore_rules: List[IgnoreRule]) -> Optional[CodeError]:
+    """Check parameter type annotation."""
+    if arg.arg in SPECIAL_VARIABLES:
+        return None
+    
+    param_location = f"{location_path}.{arg.arg}"
+    if should_ignore_error('type_annotation', param_location, arg.arg, ignore_rules):
+        return None
+    
+    if arg.annotation is not None:
+        return None
+    
+    return CodeError(
+        filename, node.lineno, node.name,
+        f"Parameter '{arg.arg}' missing type annotation"
+    )
+
+def check_return_type_annotation(node: ast.FunctionDef, filename: str, location_path: str, ignore_rules: List[IgnoreRule]) -> Optional[CodeError]:
+    """Check return type annotation."""
+    if should_ignore_error('type_annotation', location_path, 'return', ignore_rules):
+        return None
+    
+    if node.returns is not None:
+        return None
+    
+    return CodeError(
+        filename, node.lineno, node.name,
+        "Function missing return type annotation"
+    )
+
+def check_mutable_defaults(node: ast.FunctionDef, filename: str, location_path: str, ignore_rules: List[IgnoreRule]) -> List[CodeError]:
+    """Check for mutable default arguments."""
+    errors = []
+    
+    for default in node.args.defaults:
+        if not isinstance(default, (ast.Dict, ast.List, ast.Set)):
+            continue
+        
+        if should_ignore_error('mutable_default', location_path, node.name, ignore_rules):
+            continue
+        
+        error = CodeError(
+            filename, node.lineno, node.name,
+            "Function has mutable default argument"
+        )
+        errors.append(error)
+    
+    return errors
+
+def check_function_docstring(node: ast.FunctionDef, filename: str, location_path: str, ignore_rules: List[IgnoreRule]) -> List[CodeError]:
+    """Check function docstring."""
+    if should_ignore_error('docstring', location_path, node.name, ignore_rules):
+        return []
+    
+    docstring = ast.get_docstring(node)
+    if not docstring:
+        return [CodeError(
+            filename, node.lineno, node.name,
+            "Function missing docstring"
+        )]
+    
+    errors = []
+    docstring_issues = validate_docstring_format(docstring)
+    for issue in docstring_issues:
+        errors.append(CodeError(
+            filename, node.lineno, node.name,
+            f"Docstring {issue}"
+        ))
+    
+    return errors
+
+def check_function_parameters(node: ast.FunctionDef, filename: str, location_path: str, ignore_rules: List[IgnoreRule]) -> List[CodeError]:
+    """Check all function parameters."""
+    errors = []
+    
+    for arg in node.args.args:
+        # Check parameter naming
+        naming_error = check_parameter_naming(arg, node, filename, location_path, ignore_rules)
+        if naming_error:
+            errors.append(naming_error)
+        
+        # Check type annotations
+        type_error = check_parameter_type_annotation(arg, node, filename, location_path, ignore_rules)
+        if type_error:
+            errors.append(type_error)
+    
+    return errors
+
+def check_function_node(node: ast.FunctionDef, filename: str, context_stack: List[str], ignore_rules: List[IgnoreRule]) -> List[CodeError]:
+    """Check a function definition node for issues."""
+    errors = []
+    location_path = get_location_path(context_stack)
+    
+    # Check function naming
+    naming_error = check_function_naming(node, filename, location_path, ignore_rules)
+    if naming_error:
+        errors.append(naming_error)
+    
+    # Check name mangling
+    mangling_error = check_function_name_mangling(node, filename, location_path, ignore_rules)
+    if mangling_error:
+        errors.append(mangling_error)
+    
+    # Check parameters
+    param_errors = check_function_parameters(node, filename, location_path, ignore_rules)
+    errors.extend(param_errors)
+    
+    # Check return type
+    return_error = check_return_type_annotation(node, filename, location_path, ignore_rules)
+    if return_error:
+        errors.append(return_error)
+    
+    # Check mutable defaults
+    mutable_errors = check_mutable_defaults(node, filename, location_path, ignore_rules)
+    errors.extend(mutable_errors)
+    
+    # Check docstring
+    docstring_errors = check_function_docstring(node, filename, location_path, ignore_rules)
+    errors.extend(docstring_errors)
+    
+    return errors
+
+def check_class_naming(node: ast.ClassDef, filename: str, location_path: str, ignore_rules: List[IgnoreRule]) -> Optional[CodeError]:
+    """Check class naming convention."""
+    if should_ignore_error('naming', location_path, node.name, ignore_rules):
+        return None
+    
+    if is_valid_class_name(node.name):
+        return None
+    
+    return CodeError(
+        filename, node.lineno, None,
+        f"Class '{node.name}' does not follow PascalCase convention"
+    )
+
+def check_class_docstring(node: ast.ClassDef, filename: str, location_path: str, ignore_rules: List[IgnoreRule]) -> List[CodeError]:
+    """Check class docstring."""
+    if should_ignore_error('docstring', location_path, node.name, ignore_rules):
+        return []
+    
+    docstring = ast.get_docstring(node)
+    if not docstring:
+        return [CodeError(
+            filename, node.lineno, None,
+            f"Class '{node.name}' missing docstring"
+        )]
+    
+    errors = []
+    docstring_issues = validate_docstring_format(docstring)
+    for issue in docstring_issues:
+        errors.append(CodeError(
+            filename, node.lineno, None,
+            f"Class '{node.name}' docstring {issue}"
+        ))
+    
+    return errors
+
+def check_class_node(node: ast.ClassDef, filename: str, context_stack: List[str], ignore_rules: List[IgnoreRule]) -> List[CodeError]:
+    """Check a class definition node for issues."""
+    errors = []
+    location_path = get_location_path(context_stack)
+    
+    # Check class naming
+    naming_error = check_class_naming(node, filename, location_path, ignore_rules)
+    if naming_error:
+        errors.append(naming_error)
+    
+    # Check docstring
+    docstring_errors = check_class_docstring(node, filename, location_path, ignore_rules)
+    errors.extend(docstring_errors)
+    
+    return errors
+
+def check_variable_naming(node: ast.Name, filename: str, location_path: str, ignore_rules: List[IgnoreRule]) -> Optional[CodeError]:
+    """Check variable naming convention."""
+    if should_ignore_error('naming', location_path, node.id, ignore_rules):
+        return None
+    
+    if is_valid_variable_name(node.id):
+        return None
+    
+    return CodeError(
+        filename, node.lineno, None,
+        f"Variable '{node.id}' does not follow naming convention"
+    )
+
+def check_variable_name_mangling(node: ast.Name, filename: str, location_path: str, ignore_rules: List[IgnoreRule]) -> Optional[CodeError]:
+    """Check variable name mangling."""
+    if '__' not in node.id or node.id in SPECIAL_METHODS:
+        return None
+    
+    if should_ignore_error('name_mangling', location_path, node.id, ignore_rules):
+        return None
+    
+    return CodeError(
+        filename, node.lineno, None,
+        f"Variable '{node.id}' uses inappropriate name mangling"
+    )
+
+def check_variable_node(node: ast.Name, filename: str, context_stack: List[str], ignore_rules: List[IgnoreRule]) -> List[CodeError]:
+    """Check a variable assignment node for issues."""
+    if not isinstance(node.ctx, (ast.Store, ast.Param)):
+        return []
+    
+    errors = []
+    location_path = get_location_path(context_stack)
+    
+    # Check variable naming
+    naming_error = check_variable_naming(node, filename, location_path, ignore_rules)
+    if naming_error:
+        errors.append(naming_error)
+    
+    # Check name mangling
+    mangling_error = check_variable_name_mangling(node, filename, location_path, ignore_rules)
+    if mangling_error:
+        errors.append(mangling_error)
+    
+    return errors
+
+class CodeVisitor(ast.NodeVisitor):
+    """AST visitor for checking code standards."""
+    
+    def __init__(self, filename: str, ignore_rules: List[IgnoreRule]):
+        self.filename = filename
+        self.ignore_rules = ignore_rules
+        self.errors: List[CodeError] = []
+        self.context_stack: List[str] = []
+    
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.errors.extend(check_function_node(
+            node, self.filename, self.context_stack, self.ignore_rules
+        ))
+        
+        self.context_stack.append(node.name)
+        self.generic_visit(node)
+        self.context_stack.pop()
+    
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.errors.extend(check_class_node(
+            node, self.filename, self.context_stack, self.ignore_rules
+        ))
+        
+        self.context_stack.append(node.name)
+        self.generic_visit(node)
+        self.context_stack.pop()
+    
+    def visit_Name(self, node: ast.Name) -> None:
+        self.errors.extend(check_variable_node(
+            node, self.filename, self.context_stack, self.ignore_rules
+        ))
+        self.generic_visit(node)
+
+def check_file(filename: str, ignore_rules: List[IgnoreRule]) -> List[CodeError]:
+    """Check a single Python file for standards violations."""
+    try:
+        with open(filename, 'r', encoding='utf-8') as file:
+            content = file.read()
+        
+        tree = ast.parse(content, filename)
+        visitor = CodeVisitor(filename, ignore_rules)
+        visitor.visit(tree)
+        return visitor.errors
+    
+    except (SyntaxError, UnicodeDecodeError) as e:
+        return [CodeError(filename, 0, None, f"Failed to parse file: {e}")]
+
+def find_python_files(root_dir: str = '.', config: Dict[str, Any] = None) -> List[str]:
+    """Find all Python files in the directory tree."""
+    if config is None:
+        config = {}
+    
+    python_files = []
+    for root, dirs, files in os.walk(root_dir):
+        # Filter out ignored directories early
+        dirs[:] = [d for d in dirs if not should_ignore_file(os.path.join(root, d), d, config)]
+        
+        if should_ignore_file(root, os.path.basename(root), config):
+            continue
+            
+        for file in files:
+            if not file.endswith('.py'):
+                continue
+                
+            file_path = os.path.join(root, file)
+            if should_ignore_file(file_path, file, config):
+                continue
+                
+            python_files.append(file_path)
+    
+    return python_files
+
+def main() -> None:
+    """Main function to check all Python files in the current directory."""
+    config = load_ignore_config()
+    ignore_rules = extract_ignore_rules_from_config(config)
+    
+    python_files = find_python_files(config=config)
+    all_errors = []
+    
+    for file_path in python_files:
+        errors = check_file(file_path, ignore_rules)
+        all_errors.extend(errors)
+    
+    if all_errors:
+        for error in all_errors:
             print(error)
-        sys.exit(1)  # Exit with a non-zero status to indicate failure
+        sys.exit(1)
     else:
-        print("All checks passed.")
+        print("All checks passed!")
 
 if __name__ == "__main__":
     main()
