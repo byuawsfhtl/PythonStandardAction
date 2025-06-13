@@ -1,6 +1,8 @@
-import pathspec
 from pathlib import Path
 from typing import Any, Optional
+
+import pathspec
+
 """Configuration validation logic"""
 
 def load_config(config_file: Optional[Path]) -> dict[str, Any]:

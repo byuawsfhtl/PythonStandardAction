@@ -79,23 +79,39 @@ def check_import_order(imports: list[ast.Import | ast.ImportFrom], file_path: st
     
     # Check ordering: stdlib -> third-party -> local
     expected_order = ['stdlib', 'third-party', 'local']
-    current_category_index = 0
+    max_seen_category_index = -1
     
     for category, imp in import_categories:
         category_index = expected_order.index(category)
         
-        if category_index < current_category_index:
-            error = error_creation_module.create_error(imp, 'I100', f"Import '{get_import_module_name(imp)}' ({category}) should come before previous imports", file_path, ignore_codes)
-            if error:
-                errors.append(error)
-        else:
-            current_category_index = category_index
+        if category_index >= max_seen_category_index:
+            continue
+
+        error = error_creation_module.create_error(
+            imp, 
+            'I100', 
+            f"Import '{get_import_module_name(imp)}' ({category}) should come before previous imports", 
+            file_path, 
+            ignore_codes
+        )
+        if error:
+            errors.append(error)
+        
+        # Update max_seen_category_index to track the highest category we've seen
+        max_seen_category_index = max(max_seen_category_index, category_index)
     
     return errors
 
 
 def check_unused_imports(imports: list[ast.Import | ast.ImportFrom], names_used: set[str], file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
-    """Check for unused imports."""
+    """Check for unused imports.
+    
+    Args:
+        imports: List of import nodes
+        names_used: the complete set of the lib names used within the file
+        file_path: Path to file being checked
+        ignore_codes: set of error codes to ignore
+    """
     errors = []
 
     for imp in imports:
@@ -108,7 +124,14 @@ def check_unused_imports(imports: list[ast.Import | ast.ImportFrom], names_used:
 
 
 def _check_unused_import_nodes(imp: ast.Import, names_used: set[str], file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
-    """Check unused names in an ast.Import node."""
+    """Check unused names in an ast.Import node.
+    
+    Args:
+        imp: the import within the file
+        names_used: the complete set of the lib names used within the file
+        file_path: Path to file being checked
+        ignore_codes: set of error codes to ignore
+    """
     errors = []
     for alias in imp.names:
         imported_name = alias.asname if alias.asname else alias.name.split('.')[0]
@@ -121,7 +144,14 @@ def _check_unused_import_nodes(imp: ast.Import, names_used: set[str], file_path:
 
 
 def _check_unused_from_import_nodes(imp: ast.ImportFrom, names_used: set[str], file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
-    """Check unused names in an ast.ImportFrom node."""
+    """Check unused names in an ast.ImportFrom node.
+    
+    Args:
+        imp: the import within the file
+        names_used: the complete set of the lib names used within the file
+        file_path: Path to file being checked
+        ignore_codes: set of error codes to ignore
+    """
     errors = []
     for alias in imp.names:
         if alias.name == '*':

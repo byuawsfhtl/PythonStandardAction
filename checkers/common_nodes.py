@@ -1,4 +1,5 @@
 import ast
+import re
 
 import models as models
 import utils.file_utils as file_utils_module
@@ -180,7 +181,7 @@ def _check_function_docstring(node: ast.FunctionDef, file_path: str, ignore_code
         return errors
         
     # Parse documented arguments
-    doc_args = ast_helpers_module.parse_docstring_args(docstring)
+    doc_args = _parse_docstring_args(docstring)
     
     # Get function argument names (excluding self/cls)
     func_args = [arg.arg for arg in node.args.args if arg.arg not in models.SPECIAL_VARIABLES]
@@ -220,6 +221,58 @@ def _check_function_docstring(node: ast.FunctionDef, file_path: str, ignore_code
             errors.append(error)
     
     return errors
+
+
+def _parse_docstring_args(docstring: str) -> dict[str, str]:
+    """Parse arguments section from Google-style docstring.
+    
+    Args:
+        docstring: The docstring to parse
+        
+    Returns:
+        Dictionary mapping argument names to their documented types
+    """
+    args_section = {}
+    
+    # Find Args: section
+    lines = docstring.split('\n')
+    in_args_section = False
+    current_arg = None
+    
+    for line in lines:
+        stripped_line = line.strip()
+        
+        # Check if we're entering the Args section
+        if stripped_line == 'Args:':
+            in_args_section = True
+            continue
+        
+        # Check if we're leaving the Args section (new section starts)
+        if in_args_section and stripped_line.endswith(':') and not stripped_line.startswith(' '):
+            # This is a new section header, stop parsing args
+            if stripped_line not in ['Args:', 'Arguments:']:
+                break
+        
+        # If we're in args section and have content
+        if in_args_section and stripped_line:
+            # Check for argument definition: "name (type): description" or "name: description"
+            # Also handle multiline descriptions that are indented
+            arg_match = re.match(r'^(\w+)\s*(?:\(([^)]+)\))?\s*:\s*(.*)$', stripped_line)
+            if arg_match:
+                arg_name, arg_type, description = arg_match.groups()
+                current_arg = arg_name.strip()
+                # If type is specified in parentheses, use it
+                if arg_type:
+                    args_section[current_arg] = arg_type.strip()
+                else:
+                    # Try to extract type from description or set as unknown
+                    args_section[current_arg] = "Any"  # Default type when not specified
+            elif current_arg and stripped_line and line.startswith('    '):
+                # This is a continuation of the previous argument's description
+                # We can extract additional type info if needed, but for now just continue
+                pass
+    
+    return args_section
 
 
 def _check_function_annotations(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
