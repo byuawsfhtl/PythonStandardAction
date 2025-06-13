@@ -1,566 +1,137 @@
 import ast
-import re
 import sys
 import argparse
 import pathspec
 from pathlib import Path
-from dataclasses import dataclass
-from typing import Any, FrozenSet, Optional
+from typing import Any, Optional
 
-@dataclass
-class StyleError:
-    """Represents a style violation."""
-    file_path: str
-    line_number: int
-    column: int
-    error_code: str
-    message: str
-    
-    def __str__(self) -> str:
-        """Converts the error dataclass to a string.
-
-        Returns:
-            str: the error as a str
-        """
-        return f"{self.file_path}:{self.line_number}:{self.column}: {self.error_code} {self.message}"
+import models as models
+import config as config_module
+import utils.file_utils as file_utils_module
+import utils.ast_helpers as ast_helpers_module
+import checkers.common_nodes as common_nodes_module
+import checkers.imports as imports_module
+import checkers.security as security_module
 
 
-# Error codes following industry conventions (similar to flake8)
-ERROR_CODES = {
-    'N801': 'class name should use PascalCase',
-    'N802': 'function name should use snake_case',
-    'N803': 'argument name should use snake_case',
-    'N804': 'variable name should use snake_case',
-    'N805': 'inappropriate use of name mangling',
-    'ANN001': 'missing type annotation for function argument',
-    'ANN002': 'missing return type annotation',
-    'D100': 'missing docstring in public module',
-    'D101': 'missing docstring in public class',
-    'D102': 'missing docstring in public method',
-    'D103': 'missing docstring in public function',
-    'D200': 'docstring should start with capital letter',
-    'D201': 'docstring should end with period',
-    'D300': 'missing Args section in docstring',
-    'D301': 'missing Returns section in docstring',
-    'D302': 'docstring Args section is malformed',
-    'D303': 'docstring Returns section is malformed',
-    'D304': 'argument not documented in docstring',
-    'D305': 'documented argument not found in function signature',
-    'D306': 'type mismatch between annotation and docstring',
-    'B006': 'mutable default argument',
-}
-
-# Standard special methods and variables
-SPECIAL_METHODS: FrozenSet[str] = frozenset([
-    '__init__', '__del__', '__repr__', '__str__', '__bytes__', '__format__',
-    '__lt__', '__le__', '__eq__', '__ne__', '__gt__', '__ge__', '__hash__',
-    '__bool__', '__call__', '__len__', '__getitem__', '__setitem__',
-    '__delitem__', '__iter__', '__next__', '__reversed__', '__contains__',
-    '__add__', '__sub__', '__mul__', '__matmul__', '__truediv__',
-    '__floordiv__', '__mod__', '__divmod__', '__pow__', '__lshift__',
-    '__rshift__', '__and__', '__xor__', '__or__', '__iadd__', '__isub__',
-    '__imul__', '__imatmul__', '__itruediv__', '__ifloordiv__', '__imod__',
-    '__ipow__', '__ilshift__', '__irshift__', '__iand__', '__ixor__',
-    '__ior__', '__neg__', '__pos__', '__abs__', '__invert__', '__complex__',
-    '__int__', '__float__', '__round__', '__index__', '__enter__',
-    '__exit__', '__await__', '__aiter__', '__anext__', '__aenter__',
-    '__aexit__', '__new__'
-])
-
-SPECIAL_VARIABLES: FrozenSet[str] = frozenset(['self', 'cls'])
-
-PYTEST_METHODS: FrozenSet[str] = frozenset([
-    'setup_module', 'teardown_module', 'setup_class', 'teardown_class',
-    'setup_method', 'teardown_method', 'setup_function', 'teardown_function'
-])
-
-
-def load_config(config_file: Optional[Path]) -> dict[str, Any]:
-    """Load configuration from file or use defaults.
-    
-    Args:
-        config_file: Path to configuration file
-        
-    Returns:
-        Configuration dictionary
-    """
-    # Default configuration
-    config = {
-        'ignore_codes': set(),
-        'max_line_length': 88,  # Black default
-        'exclude_dirs': {'.git', '__pycache__', '.pytest_cache', '.mypy_cache'},
-    }
-    
-    # TODO: Implement TOML/INI config file loading for production use
-    return config
-
-
-def load_ignore_patterns() -> Optional[pathspec.PathSpec]:
-    """Load ignore patterns from .standardignore file.
-    
-    Returns:
-        PathSpec object for pattern matching, or None if no patterns
-    """
-    ignore_file = Path('.standardignore')
-    if not ignore_file.exists():
-        return None
-
-    with open(ignore_file, 'r', encoding='utf-8') as f:
-        patterns = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-    return pathspec.PathSpec.from_lines('gitwildmatch', patterns)
-
-def should_ignore_file(file_path: Path, ignore_patterns: Optional[pathspec.PathSpec]) -> bool:
-    """Check if file should be ignored based on patterns.
-    
-    Args:
-        file_path: Path to check
-        ignore_patterns: Patterns to check against
-        
-    Returns:
-        True if file should be ignored
-    """
-    if not ignore_patterns:
-        return False
-    path_str = str(file_path)
-    return ignore_patterns.match_file(path_str)
-
-def create_error(node: ast.AST, error_code: str, message: str, file_path: str, ignore_codes: set[str]) -> Optional[StyleError]:
-    """Create a style error if not ignored.
-    
-    Args:
-        node: AST node where error occurred
-        error_code: Error code from ERROR_CODES
-        message: Descriptive error message
-        file_path: Path to file containing the error
-        ignore_codes: set of error codes to ignore
-        
-    Returns:
-        StyleError instance or None if ignored
-    """
-    if error_code in ignore_codes:
-        return None
-        
-    return StyleError(
-        file_path=file_path,
-        line_number=getattr(node, 'lineno', 0),
-        column=getattr(node, 'col_offset', 0),
-        error_code=error_code,
-        message=message
-    )
-
-
-def is_snake_case(name_of_var: str) -> bool:
-    """Check if name follows snake_case convention.
-    
-    Args:
-        name_of_var: Name to check
-        
-    Returns:
-        True if name is valid snake_case
-    """
-    # Allow single letters, constants (ALL_CAPS), and private names
-    if len(name_of_var) == 1 or name_of_var.isupper() or name_of_var.startswith('_'):
-        return True
-        
-    # Standard snake_case pattern
-    return bool(re.match(r'^[a-z][a-z0-9_]*$', name_of_var))
-
-
-def is_pascal_case(name: str) -> bool:
-    """Check if name follows PascalCase convention.
-    
-    Args:
-        name: Name to check
-        
-    Returns:
-        True if name is valid PascalCase
-    """
-    return bool(re.match(r'^[A-Z][A-Za-z0-9]*$', name))
-
-
-def is_test_function_name(name: str) -> bool:
-    """Check if name follows test function conventions.
-    
-    Args:
-        name: Function name to check
-        
-    Returns:
-        True if name follows test conventions
-    """
-    return (name.startswith('test_') and is_snake_case(name)) or name in PYTEST_METHODS
-
-
-def get_type_string(annotation: ast.AST) -> str:
-    """Extract type string from AST annotation.
-    
-    Args:
-        annotation: AST node representing type annotation
-        
-    Returns:
-        String representation of the type
-    """
-    if annotation is None:
-        return ""
-        
-    if isinstance(annotation, ast.Name):
-        return annotation.id
-    elif isinstance(annotation, ast.Attribute):
-        return f"{get_type_string(annotation.value)}.{annotation.attr}"
-    elif isinstance(annotation, ast.Subscript):
-        return f"{get_type_string(annotation.value)}[{get_type_string(annotation.slice)}]"
-    elif isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
-        # Union types (X | Y)
-        left = get_type_string(annotation.left)
-        right = get_type_string(annotation.right)
-        return f"{left} | {right}"
-    elif isinstance(annotation, ast.Constant):
-        return repr(annotation.value)
-    elif isinstance(annotation, ast.Tuple):
-        elements = [get_type_string(elt) for elt in annotation.elts]
-        return f"({', '.join(elements)})"
-    else:
-        # Fallback: use ast.unparse if available (Python 3.9+)
-        try:
-            return ast.unparse(annotation)
-        except AttributeError:
-            return "<unknown>"
-
-
-def parse_docstring_args(docstring: str) -> dict[str, str]:
-    """Parse arguments section from Google-style docstring.
-    
-    Args:
-        docstring: The docstring to parse
-        
-    Returns:
-        Dictionary mapping argument names to their documented types
-    """
-    args_section = {}
-    
-    # Find Args: section
-    lines = docstring.split('\n')
-    in_args_section = False
-    current_arg = None
-    
-    for line in lines:
-        stripped_line = line.strip()
-        
-        # Check if we're entering the Args section
-        if stripped_line == 'Args:':
-            in_args_section = True
-            continue
-        
-        # Check if we're leaving the Args section (new section starts)
-        if in_args_section and stripped_line.endswith(':') and not stripped_line.startswith(' '):
-            # This is a new section header, stop parsing args
-            if stripped_line not in ['Args:', 'Arguments:']:
-                break
-        
-        # If we're in args section and have content
-        if in_args_section and stripped_line:
-            # Check for argument definition: "name (type): description" or "name: description"
-            # Also handle multiline descriptions that are indented
-            arg_match = re.match(r'^(\w+)\s*(?:\(([^)]+)\))?\s*:\s*(.*)$', stripped_line)
-            if arg_match:
-                arg_name, arg_type, description = arg_match.groups()
-                current_arg = arg_name.strip()
-                # If type is specified in parentheses, use it
-                if arg_type:
-                    args_section[current_arg] = arg_type.strip()
-                else:
-                    # Try to extract type from description or set as unknown
-                    args_section[current_arg] = "Any"  # Default type when not specified
-            elif current_arg and stripped_line and line.startswith('    '):
-                # This is a continuation of the previous argument's description
-                # We can extract additional type info if needed, but for now just continue
-                pass
-    
-    return args_section
-
-
-def check_docstring_format(node: ast.FunctionDef|ast.ClassDef, docstring: str, file_path: str, ignore_codes: set[str]) -> list[StyleError]:
-    """Check docstring formatting rules.
-    
-    Args:
-        node: AST node (function or class)
-        docstring: The docstring content
-        file_path: Path to file being checked
-        ignore_codes: set of error codes to ignore
-        
-    Returns:
-        list of style errors found
-    """
-    errors = []
-    if not docstring:
-        return errors
-    first_line = docstring.split('\n')[0].strip()
-    
-    # Check capitalization
-    if first_line and first_line[0].islower():
-        error = create_error(node, 'D200', "Docstring should start with capital letter", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    
-    # Check ending punctuation
-    if first_line and not first_line.endswith('.'):
-        error = create_error(node, 'D201', "Docstring should end with period", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    
-    return errors
-
-
-def check_function_docstring(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[StyleError]:
-    """Check function docstring completeness and accuracy.
-    
-    Args:
-        node: Function definition node
-        file_path: Path to file being checked
-        ignore_codes: set of error codes to ignore
-        
-    Returns:
-        list of style errors found
-    """
-    errors = []
-    docstring = ast.get_docstring(node)
-    if not docstring:
-        return errors
-        
-    # Parse documented arguments
-    doc_args = parse_docstring_args(docstring)
-    
-    # Get function argument names (excluding self/cls)
-    func_args = [arg.arg for arg in node.args.args if arg.arg not in SPECIAL_VARIABLES]
-    
-    # Only check documentation if function has arguments
-    if not func_args:
-        return errors
-    
-    # Check if all function arguments are documented
-    for arg in node.args.args:
-        if arg.arg in SPECIAL_VARIABLES:
-            continue
-            
-        if arg.arg not in doc_args:
-            error = create_error(node, 'D304', f"Argument '{arg.arg}' not documented in docstring", file_path, ignore_codes)
-            if error:
-                errors.append(error)
-        else:
-            # Check type consistency if both annotation and docstring type exist
-            actual_type = get_type_string(arg.annotation)
-            doc_type = doc_args[arg.arg]
-            inconsistent_typing = actual_type != doc_type
-            
-            # Only check type consistency if we have both and they're not generic
-            if (actual_type and doc_type and inconsistent_typing and doc_type != "Any" and actual_type != "<unknown>"):
-                error = create_error(node, 'D306', f"annotation='{actual_type}', docstring='{doc_type}'", file_path, ignore_codes)
-                if error:
-                    errors.append(error)
-    
-    # Check for documented args that don't exist
-    func_arg_names = {arg.arg for arg in node.args.args}
-    for doc_arg in doc_args:
-        if doc_arg in func_arg_names:
-            continue
-        error = create_error(node, 'D305', f"Documented argument '{doc_arg}' not found in function signature", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    
-    return errors
-
-
-def check_class(node: ast.ClassDef, file_path: str, ignore_codes: set[str]) -> list[StyleError]:
-    """Check class definition.
-    
-    Args:
-        node: Class definition node
-        file_path: Path to file being checked
-        ignore_codes: set of error codes to ignore
-        
-    Returns:
-        list of style errors found
-    """
-    errors = []
-    
-    # Check naming convention
-    if not is_pascal_case(node.name):
-        error = create_error(node, 'N801', f"Class name '{node.name}' should use PascalCase", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    
-    # Check docstring
-    docstring = ast.get_docstring(node)
-    if not docstring:
-        error = create_error(node, 'D101', f"Missing docstring in class '{node.name}'", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    else:
-        errors.extend(check_docstring_format(node, docstring, file_path, ignore_codes))
-    
-    return errors
-
-
-def check_function(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[StyleError]:
-    """Check function definition.
-    
-    Args:
-        node: Function definition node
-        file_path: Path to file being checked
-        ignore_codes: set of error codes to ignore
-        
-    Returns:
-        list of style errors found
-    """
-    errors = []
-    is_test_file = 'test' in file_path.lower()
-    
-    # Check naming convention
-    if node.name in SPECIAL_METHODS:
-        pass  # Special methods are exempt
-    elif is_test_file and is_test_function_name(node.name):
-        pass  # Test functions follow different convention
-    elif not is_snake_case(node.name):
-        error = create_error(node, 'N802', f"Function name '{node.name}' should use snake_case", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    
-    # Check for inappropriate name mangling
-    if '__' in node.name and node.name not in SPECIAL_METHODS:
-        error = create_error(node, 'N805', f"Inappropriate use of name mangling in '{node.name}'", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    
-    # Check docstring
-    docstring = ast.get_docstring(node)
-    if not docstring:
-        error = create_error(node, 'D102', f"Missing docstring in function '{node.name}'", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    else:
-        errors.extend(check_docstring_format(node, docstring, file_path, ignore_codes))
-        errors.extend(check_function_docstring(node, file_path, ignore_codes))
-    
-    # Check type annotations
-    errors.extend(check_function_annotations(node, file_path, ignore_codes))
-    
-    # Check for mutable defaults
-    errors.extend(check_mutable_defaults(node, file_path, ignore_codes))
-    
-    return errors
-
-
-def check_function_annotations(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[StyleError]:
-    """Check function type annotations.
-    
-    Args:
-        node: Function definition node
-        file_path: Path to file being checked
-        ignore_codes: set of error codes to ignore
-        
-    Returns:
-        list of style errors found
-    """
-    errors = []
-    
-    # Check parameter annotations
-    for arg in node.args.args:
-        if arg.arg in SPECIAL_VARIABLES:
-            continue
-        if not arg.annotation:
-            error = create_error(node, 'ANN001',f"Missing type annotation for argument '{arg.arg}'",file_path, ignore_codes)
-            if error:
-                errors.append(error)
-    
-    # Check return annotation
-    if not node.returns:
-        error = create_error(node, 'ANN002', f"Missing return type annotation for function '{node.name}'", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    
-    return errors
-
-
-def check_mutable_defaults(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[StyleError]:
-    """Check for mutable default arguments.
-    
-    Args:
-        node: Function definition node
-        file_path: Path to file being checked
-        ignore_codes: set of error codes to ignore
-        
-    Returns:
-        list of style errors found
-    """
-    errors = []
-    
-    for default in node.args.defaults:
-        if not isinstance(default, (ast.List, ast.Dict, ast.Set)):
-            continue
-        error = create_error(node, 'B006', f"Mutable default argument in function '{node.name}'", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    
-    return errors
-
-
-def check_variable(node: ast.Name, file_path: str, ignore_codes: set[str]) -> list[StyleError]:
-    """Check variable naming.
-    
-    Args:
-        node: Variable name node
-        file_path: Path to file being checked
-        ignore_codes: set of error codes to ignore
-        
-    Returns:
-        list of style errors found
-    """
-    errors = []
-    
-    if not is_snake_case(node.id):
-        error = create_error(node, 'N804', f"Variable name '{node.id}' should use snake_case", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    
-    if '__' in node.id and not node.id.startswith('__'):
-        error = create_error(node, 'N805', f"Inappropriate use of name mangling in variable '{node.id}'", file_path, ignore_codes)
-        if error:
-            errors.append(error)
-    
-    return errors
-
-
-def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str]) -> list[StyleError]:
+def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_names: set[str] = None) -> list[models.StyleError]:
     """Visit an AST node and perform checks.
     
     Args:
         node: AST node to check
         file_path: Path to file containing the node
         ignore_codes: set of error codes to ignore
+        ignore_names: set of names to ignore
         
     Returns:
         list of style errors found
     """
+    ignore_names = ignore_names or set()
+    
     if isinstance(node, ast.ClassDef):
-        return check_class(node, file_path, ignore_codes)
+        return common_nodes_module.check_class(node, file_path, ignore_codes, ignore_names)
     elif isinstance(node, ast.FunctionDef):
-        return check_function(node, file_path, ignore_codes)
+        errors = common_nodes_module.check_function(node, file_path, ignore_codes, ignore_names)
+        # Check cyclomatic complexity
+        errors.extend(check_complexity(node, file_path, ignore_codes))
+        return errors
     elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-        return check_variable(node, file_path, ignore_codes)
+        return common_nodes_module.check_variable(node, file_path, ignore_codes, ignore_names)
     else:
         return []
 
 
-def check_file(file_path: Path, ignore_codes: set[str]) -> list[StyleError]:
-    """Check a single Python file.
+def check_complexity(node: ast.FunctionDef, file_path: str, ignore_codes: set[str], max_complexity: int = 5, max_indentation: int = 4) -> list[models.StyleError]:
+    """Check cyclomatic complexity and indentation depth of a function.
     
     Args:
-        file_path: Path to Python file to check
+        node: Function definition node
+        file_path: Path to file being checked
         ignore_codes: set of error codes to ignore
+        max_complexity: Maximum allowed complexity
+        max_indentation: Maximum allowed indentation depth
         
     Returns:
         list of style errors found
     """
     errors = []
+    
+    # Check cyclomatic complexity
+    if 'C901' not in ignore_codes:
+        complexity = ast_helpers_module.calculate_cyclomatic_complexity(node)
+        if complexity > max_complexity:
+            error = models.StyleError(
+                file_path=file_path,
+                line_number=getattr(node, 'lineno', 0),
+                column=getattr(node, 'col_offset', 0),
+                error_code='C901',
+                message=f"Function '{node.name}' is too complex ({complexity}), consider breaking into helper functions"
+            )
+            errors.append(error)
+    
+    # Check indentation depth
+    if 'C902' not in ignore_codes:  # Using C902 for indentation depth
+        max_depth = _calculate_max_indentation_depth(node)
+        if max_depth > max_indentation:
+            error = models.StyleError(
+                file_path=file_path,
+                line_number=getattr(node, 'lineno', 0),
+                column=getattr(node, 'col_offset', 0),
+                error_code='C902',
+                message=f"Function '{node.name}' has excessive nesting depth ({max_depth}). "
+                       f"Consider flattening your code structure. See: https://www.youtube.com/watch?v=CFRhGnuXG-4"
+            )
+            errors.append(error)
+    
+    return errors
+
+
+def _calculate_max_indentation_depth(node: ast.AST, current_depth: int = 0) -> int:
+    """Calculate the maximum indentation depth within a node.
+    
+    Args:
+        node: AST node to analyze
+        current_depth: Current nesting depth
+        
+    Returns:
+        Maximum indentation depth found
+    """
+    max_depth = current_depth
+    # Nodes that increase indentation depth
+    nesting_nodes = (
+        ast.If, ast.For, ast.While, ast.With, ast.Try, ast.ExceptHandler,
+        ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Match
+    )
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, nesting_nodes):
+            # Skip function/class definitions as they don't count as "nesting" in the same way
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                child_depth = _calculate_max_indentation_depth(child, current_depth)
+            else:
+                child_depth = _calculate_max_indentation_depth(child, current_depth + 1)
+            max_depth = max(max_depth, child_depth)
+        else:
+            child_depth = _calculate_max_indentation_depth(child, current_depth)
+            max_depth = max(max_depth, child_depth)
+    return max_depth
+
+
+def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] = None, config: dict[str, Any] = None) -> list[models.StyleError]:
+    """Check a single Python file.
+    
+    Args:
+        file_path: Path to Python file to check
+        ignore_codes: set of error codes to ignore
+        ignore_names: set of names to ignore
+        config: Configuration dictionary
+        
+    Returns:
+        list of style errors found
+    """
+    errors = []
+    ignore_names = ignore_names or set()
+    config = config or {}
+    max_complexity = config.get('max_complexity', 10)
     
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -568,23 +139,46 @@ def check_file(file_path: Path, ignore_codes: set[str]) -> list[StyleError]:
             
         tree = ast.parse(content, filename=str(file_path))
         
+        # Collect imports and used names for import checking
+        imports = []
+        import_froms = []
         for node in ast.walk(tree):
-            errors.extend(visit_node(node, str(file_path), ignore_codes))
+            if isinstance(node, ast.Import):
+                imports.append(node)
+            elif isinstance(node, ast.ImportFrom):
+                import_froms.append(node)
+        
+        all_imports = imports + import_froms
+        used_names = ast_helpers_module.collect_used_names(tree)
+        
+        # Check imports
+        errors.extend(imports_module.check_import_order(all_imports, str(file_path), ignore_codes))
+        errors.extend(imports_module.check_unused_imports(all_imports, used_names, str(file_path), ignore_codes))
+        errors.extend(imports_module.check_wildcard_imports(import_froms, str(file_path), ignore_codes))
+        errors.extend(imports_module.check_relative_imports(import_froms, str(file_path), ignore_codes))
+        
+        # Check security issues
+        errors.extend(security_module.check_security_issues(tree, content, str(file_path), ignore_codes))
+        
+        # Check individual nodes
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                # Pass max_complexity from config
+                node_errors = visit_node(node, str(file_path), ignore_codes, ignore_names)
+                complexity_errors = check_complexity(node, str(file_path), ignore_codes, max_complexity)
+                errors.extend(node_errors)
+                errors.extend(complexity_errors)
+            else:
+                errors.extend(visit_node(node, str(file_path), ignore_codes, ignore_names))
             
     except SyntaxError as e:
-        error = StyleError(
-            file_path=str(file_path),
-            line_number=e.lineno or 0,
-            column=e.offset or 0,
-            error_code='E999',
-            message=f"Syntax error: {e.msg}"
-        )
+        error = models.StyleError(file_path=str(file_path),line_number=e.lineno or 0, column=e.offset or 0, error_code='E999', message=f"Syntax error: {e.msg}")
         errors.append(error)
     
     return errors
 
 
-def check_directory(directory: Path, config: dict[str, Any], ignore_patterns: Optional[pathspec.PathSpec]) -> list[StyleError]:
+def check_directory(directory: Path, config: dict[str, Any], ignore_patterns: Optional[pathspec.PathSpec]) -> list[models.StyleError]:
     """Check all Python files in a directory recursively.
     
     Args:
@@ -598,14 +192,14 @@ def check_directory(directory: Path, config: dict[str, Any], ignore_patterns: Op
     all_errors = []
     
     for file_path in directory.rglob('*.py'):
-        if should_ignore_file(file_path, ignore_patterns):
+        if file_utils_module.should_ignore_file(file_path, ignore_patterns):
             continue
             
         if any(excluded in file_path.parts 
                for excluded in config['exclude_dirs']):
             continue
             
-        errors = check_file(file_path, config['ignore_codes'])
+        errors = check_file(file_path, config['ignore_codes'], config['ignore_names'], config)
         all_errors.extend(errors)
     
     return all_errors
@@ -621,11 +215,17 @@ def main() -> int:
     parser.add_argument('paths', nargs='*', default=['.'], help='Paths to check (default: current directory)')
     parser.add_argument('--config', type=Path, help='Path to configuration file')
     parser.add_argument('--ignore', action='append', help='Error codes to ignore')
+    parser.add_argument('--max-complexity', type=int, default=10, help='Maximum cyclomatic complexity (default: 10)')
     
     args = parser.parse_args()
     
-    config = load_config(args.config)
-    ignore_patterns = load_ignore_patterns()
+    config = config_module.load_config(args.config)
+    ignore_patterns = config_module.load_ignore_patterns()
+    config['ignore_names'] = config_module.load_ignore_names()
+    
+    # Override complexity setting if provided
+    if args.max_complexity:
+        config['max_complexity'] = args.max_complexity
     
     if args.ignore:
         config['ignore_codes'].update(args.ignore)
@@ -636,9 +236,9 @@ def main() -> int:
     for path_str in args.paths:
         path = Path(path_str)
         if path.is_file():
-            if should_ignore_file(path, ignore_patterns):
+            if file_utils_module.should_ignore_file(path, ignore_patterns):
                 continue
-            errors = check_file(path, config['ignore_codes'])
+            errors = check_file(path, config['ignore_codes'], config['ignore_names'], config)
             all_errors.extend(errors)
         elif path.is_dir():
             errors = check_directory(path, config, ignore_patterns)
