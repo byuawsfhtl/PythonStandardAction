@@ -1,4 +1,3 @@
-
 import ast
 import re
 import sys
@@ -241,22 +240,41 @@ def parse_docstring_args(docstring: str) -> dict[str, str]:
     # Find Args: section
     lines = docstring.split('\n')
     in_args_section = False
+    current_arg = None
     
     for line in lines:
-        line = line.strip()
-        if line == 'Args:':
+        stripped_line = line.strip()
+        
+        # Check if we're entering the Args section
+        if stripped_line == 'Args:':
             in_args_section = True
             continue
-        elif line.endswith(':') and in_args_section:
-            # New section started
-            break
-        elif in_args_section and line:
-            # Parse argument line: "name (type): description"
-            match = re.match(r'^(\w+)\s*\(([^)]+)\):\s*(.+)$', line)
-            if match:
-                arg_name, arg_type, description = match.groups()
-                args_section[arg_name.strip()] = arg_type.strip()
-                
+        
+        # Check if we're leaving the Args section (new section starts)
+        if in_args_section and stripped_line.endswith(':') and not stripped_line.startswith(' '):
+            # This is a new section header, stop parsing args
+            if stripped_line not in ['Args:', 'Arguments:']:
+                break
+        
+        # If we're in args section and have content
+        if in_args_section and stripped_line:
+            # Check for argument definition: "name (type): description" or "name: description"
+            # Also handle multiline descriptions that are indented
+            arg_match = re.match(r'^(\w+)\s*(?:\(([^)]+)\))?\s*:\s*(.*)$', stripped_line)
+            if arg_match:
+                arg_name, arg_type, description = arg_match.groups()
+                current_arg = arg_name.strip()
+                # If type is specified in parentheses, use it
+                if arg_type:
+                    args_section[current_arg] = arg_type.strip()
+                else:
+                    # Try to extract type from description or set as unknown
+                    args_section[current_arg] = "Any"  # Default type when not specified
+            elif current_arg and stripped_line and line.startswith('    '):
+                # This is a continuation of the previous argument's description
+                # We can extract additional type info if needed, but for now just continue
+                pass
+    
     return args_section
 
 
@@ -305,12 +323,18 @@ def check_function_docstring(node: ast.FunctionDef, file_path: str, ignore_codes
     """
     errors = []
     docstring = ast.get_docstring(node)
-    
     if not docstring:
         return errors
         
     # Parse documented arguments
     doc_args = parse_docstring_args(docstring)
+    
+    # Get function argument names (excluding self/cls)
+    func_args = [arg.arg for arg in node.args.args if arg.arg not in SPECIAL_VARIABLES]
+    
+    # Only check documentation if function has arguments
+    if not func_args:
+        return errors
     
     # Check if all function arguments are documented
     for arg in node.args.args:
@@ -322,20 +346,25 @@ def check_function_docstring(node: ast.FunctionDef, file_path: str, ignore_codes
             if error:
                 errors.append(error)
         else:
-            # Check type consistency
+            # Check type consistency if both annotation and docstring type exist
             actual_type = get_type_string(arg.annotation)
-            if actual_type and actual_type != doc_args[arg.arg]:
-                error = create_error(node, 'D306',f"Type mismatch for '{arg.arg}': "f"annotation='{actual_type}', "f"docstring='{doc_args[arg.arg]}'", file_path, ignore_codes)
+            doc_type = doc_args[arg.arg]
+            inconsistent_typing = actual_type != doc_type
+            
+            # Only check type consistency if we have both and they're not generic
+            if (actual_type and doc_type and inconsistent_typing and doc_type != "Any" and actual_type != "<unknown>"):
+                error = create_error(node, 'D306', f"annotation='{actual_type}', docstring='{doc_type}'", file_path, ignore_codes)
                 if error:
                     errors.append(error)
     
     # Check for documented args that don't exist
     func_arg_names = {arg.arg for arg in node.args.args}
     for doc_arg in doc_args:
-        if doc_arg not in func_arg_names:
-            error = create_error(node, 'D305', f"Documented argument '{doc_arg}' not found in function signature", file_path, ignore_codes)
-            if error:
-                errors.append(error)
+        if doc_arg in func_arg_names:
+            continue
+        error = create_error(node, 'D305', f"Documented argument '{doc_arg}' not found in function signature", file_path, ignore_codes)
+        if error:
+            errors.append(error)
     
     return errors
 
@@ -355,18 +384,14 @@ def check_class(node: ast.ClassDef, file_path: str, ignore_codes: set[str]) -> l
     
     # Check naming convention
     if not is_pascal_case(node.name):
-        error = create_error(node, 'N801', 
-                           f"Class name '{node.name}' should use PascalCase", 
-                           file_path, ignore_codes)
+        error = create_error(node, 'N801', f"Class name '{node.name}' should use PascalCase", file_path, ignore_codes)
         if error:
             errors.append(error)
     
     # Check docstring
     docstring = ast.get_docstring(node)
     if not docstring:
-        error = create_error(node, 'D101', 
-                           f"Missing docstring in class '{node.name}'", 
-                           file_path, ignore_codes)
+        error = create_error(node, 'D101', f"Missing docstring in class '{node.name}'", file_path, ignore_codes)
         if error:
             errors.append(error)
     else:
