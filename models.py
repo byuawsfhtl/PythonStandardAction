@@ -16,7 +16,7 @@ class StyleError:
         Returns:
             str: the error as a str
         """
-        return f"{self.file_path}:{self.line_number}:{self.column}: {self.error_code} {self.message}"
+        return f"{self.error_code} at {self.file_path}:{self.line_number}:{self.column} - {self.message}"
 
 
 # Error codes following industry conventions (similar to flake8)

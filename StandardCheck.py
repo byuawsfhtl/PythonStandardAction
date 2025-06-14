@@ -33,9 +33,7 @@ def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_nam
     if isinstance(node, ast.ClassDef):
         return common_nodes_module.check_class(node, file_path, ignore_codes, ignore_names)
     elif isinstance(node, ast.FunctionDef):
-        errors = common_nodes_module.check_function(node, file_path, ignore_codes, ignore_names)
-        errors.extend(complexity_module.check_complexity(node, file_path, ignore_codes))
-        return errors
+        return common_nodes_module.check_function(node, file_path, ignore_codes, ignore_names)
     elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
         return common_nodes_module.check_variable(node, file_path, ignore_codes, ignore_names)
     else:
@@ -58,46 +56,24 @@ def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] =
     ignore_names = ignore_names or set()
     config = config or {}
     max_complexity = config.get('max_complexity', 10)
+    max_indentation = config.get('max_indentation', 4)
 
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
+    tree = ast_helpers_module.parse_ast_safely(content, file_path)
+    if isinstance(tree, list):  # list means syntax error already returned
+        return tree
 
-    try:
-        tree = ast.parse(content, filename=str(file_path))
-    except SyntaxError as e:
-        error = models.StyleError(file_path=str(file_path), line_number=e.lineno or 0, column=e.offset or 0, error_code='E999', message=f"Syntax error: {e.msg}")
-        return [error]
-
-    # Collect imports and used names for import checking
-    imports = []
-    import_froms = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imports.append(node)
-        elif isinstance(node, ast.ImportFrom):
-            import_froms.append(node)
-
-    all_imports = imports + import_froms
+    all_imports, import_froms = imports_module.collect_imports(tree)
     used_names = ast_helpers_module.collect_used_names(tree)
 
-    # Check imports
-    errors.extend(imports_module.check_import_order(all_imports, str(file_path), ignore_codes))
-    errors.extend(imports_module.check_unused_imports(all_imports, used_names, str(file_path), ignore_codes))
-    errors.extend(imports_module.check_wildcard_imports(import_froms, str(file_path), ignore_codes))
-    errors.extend(imports_module.check_relative_imports(import_froms, str(file_path), ignore_codes))
-
-    # Check security issues
+    errors.extend(imports_module.check_imports(all_imports, import_froms, used_names, file_path, ignore_codes))
     errors.extend(security_module.check_security_issues(tree, content, str(file_path), ignore_codes))
+    errors.extend(complexity_module.check_complexity(tree, content, str(file_path), ignore_codes, max_complexity, max_indentation))
 
-    # TODO move it here
-
-    # Check individual nodes
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef):
-            node_errors = visit_node(node, str(file_path), ignore_codes, ignore_names)
-            complexity_errors = complexity_module.check_complexity(node, str(file_path), ignore_codes, max_complexity) # TODO move me, and add content as a variable
-            errors.extend(node_errors)
-            errors.extend(complexity_errors)
+            errors.extend(visit_node(node, str(file_path), ignore_codes, ignore_names))
         else:
             errors.extend(visit_node(node, str(file_path), ignore_codes, ignore_names))
 

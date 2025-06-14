@@ -1,4 +1,7 @@
 import ast
+from pathlib import Path
+
+import models as models
 
 """Helper functions in AST traversal"""
 
@@ -56,3 +59,25 @@ def collect_used_names(tree: ast.AST) -> set[str]:
             if isinstance(node.value, ast.Name):
                 used_names.add(node.value.id)
     return used_names
+
+def parse_ast_safely(content: str, file_path: Path) -> ast.AST | list[models.StyleError]:
+    """Safely parse Python source code into an AST.
+
+    Args:
+        content: String content of the Python file
+        file_path: Path to the Python file
+
+    Returns:
+        Parsed AST, or list containing a syntax error if parsing fails
+    """
+    try:
+        return ast.parse(content, filename=str(file_path))
+    except SyntaxError as e:
+        error = models.StyleError(
+            file_path=str(file_path),
+            line_number=e.lineno or 0,
+            column=e.offset or 0,
+            error_code='E999',
+            message=f"Syntax error: {e.msg}"
+        )
+        return [error]

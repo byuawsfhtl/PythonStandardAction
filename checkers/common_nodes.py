@@ -3,7 +3,6 @@ import re
 
 import models as models
 import utils.file_utils as file_utils_module
-import utils.ast_helpers as ast_helpers_module
 import utils.patterns as patterns_module
 import checkers.error_creation as error_creation_module
 
@@ -164,86 +163,117 @@ def _check_docstring_format(node: ast.FunctionDef|ast.ClassDef, docstring: str, 
 
 
 def _check_function_docstring(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
-    """Check function docstring completeness and accuracy.
-    
+    """Check function docstring completeness.
+
     Args:
         node: Function definition node
         file_path: Path to file being checked
         ignore_codes: set of error codes to ignore
-        
+
     Returns:
         list of style errors found
     """
     errors = []
     docstring = ast.get_docstring(node)
-    
+
     if not docstring:
         return errors
-        
-    # Parse documented arguments
+
     doc_args = _parse_docstring_args(docstring)
-    
-    # Get function argument names (excluding self/cls)
     func_args = [arg.arg for arg in node.args.args if arg.arg not in models.SPECIAL_VARIABLES]
-    
-    # Only check documentation if function has arguments
-    if not func_args:
-        return errors
-    
-    # Check if all function arguments are documented
-    for arg in node.args.args:
-        if arg.arg in models.SPECIAL_VARIABLES:
-            continue
-            
-        if arg.arg not in doc_args:
-            error = error_creation_module.create_error(node, 'D304', f"Argument '{arg.arg}' not documented in docstring", file_path, ignore_codes)
+
+    if func_args:
+        errors.extend(_check_missing_doc_args(node, func_args, doc_args, file_path, ignore_codes))
+        errors.extend(_check_extra_doc_args(node, func_args, doc_args, file_path, ignore_codes))
+
+    if node.name not in ['__init__', '__enter__', '__exit__']:
+        errors.extend(_check_missing_returns_section(node, docstring, file_path, ignore_codes))
+
+    return errors
+
+def _check_missing_doc_args(node: ast.FunctionDef, func_args: list[str], doc_args: set[str], file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+    """Check for arguments in signature that are missing in the docstring.
+
+    Args:
+        node: AST node for the function definition
+        func_args: List of argument names in the function signature
+        doc_args: Set of argument names documented in the docstring
+        file_path: Path to file being checked
+        ignore_codes: set of error codes to ignore
+
+    Returns:
+        list of style errors for missing documented arguments
+    """
+    errors = []
+    for arg in func_args:
+        if arg not in doc_args:
+            error = error_creation_module.create_error(node, 'D304', f"Argument '{arg}' not documented in docstring", file_path, ignore_codes)
             if error:
                 errors.append(error)
-        else:
-            # Check type consistency if both annotation and docstring type exist
-            actual_type = ast_helpers_module.get_type_string(arg.annotation)
-            doc_type = doc_args[arg.arg]
-            inconsistent_typing = actual_type != doc_type
-            
-            # Only check type consistency if we have both and they're not generic
-            if (actual_type and doc_type and inconsistent_typing and doc_type != "Any" and actual_type != "<unknown>"):
-                error = error_creation_module.create_error(node, 'D306', f"Type mismatch for '{arg.arg}': annotation='{actual_type}' docstring='{doc_type}'", file_path, ignore_codes)
-                if error:
-                    errors.append(error)
-    
-    # Check for documented args that don't exist
-    func_arg_names = {arg.arg for arg in node.args.args}
+    return errors
+
+def _check_extra_doc_args(node: ast.FunctionDef, func_args: list[str], doc_args: set[str], file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+    """Check for arguments documented in the docstring but missing from the signature.
+
+    Args:
+        node: AST node for the function definition
+        func_args: List of argument names in the function signature
+        doc_args: Set of argument names documented in the docstring
+        file_path: Path to file being checked
+        ignore_codes: set of error codes to ignore
+
+    Returns:
+        list of style errors for undocumented parameters in the function signature
+    """
+    errors = []
+    func_arg_set = set(func_args)
     for doc_arg in doc_args:
-        if doc_arg in func_arg_names:
-            continue
-        error = error_creation_module.create_error(node, 'D305', f"Documented argument '{doc_arg}' not found in function signature", file_path, ignore_codes)
+        if doc_arg not in func_arg_set:
+            error = error_creation_module.create_error(node, 'D305', f"Documented argument '{doc_arg}' not found in function signature", file_path, ignore_codes)
+            if error:
+                errors.append(error)
+    return errors
+
+def _check_missing_returns_section(node: ast.FunctionDef, docstring: str, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+    """Check if a Returns section is missing from the docstring.
+
+    Args:
+        node: AST node for the function definition
+        docstring: The full docstring content of the function
+        file_path: Path to file being checked
+        ignore_codes: set of error codes to ignore
+
+    Returns:
+        list containing a style error if the Returns section is missing, or empty list otherwise
+    """
+    errors = []
+    if not _has_returns_section(docstring):
+        error = error_creation_module.create_error(node, 'D307', f"Function '{node.name}' missing Returns section in docstring", file_path, ignore_codes)
         if error:
             errors.append(error)
-    
     return errors
 
 
-def _parse_docstring_args(docstring: str) -> dict[str, str]:
+def _parse_docstring_args(docstring: str) -> set[str]:
     """Parse arguments section from Google-style docstring.
     
     Args:
         docstring: The docstring to parse
         
     Returns:
-        Dictionary mapping argument names to their documented types
+        Set of documented argument names
     """
-    args_section = {}
+    args_section = set()
     
     # Find Args: section
     lines = docstring.split('\n')
     in_args_section = False
-    current_arg = None
     
     for line in lines:
         stripped_line = line.strip()
         
         # Check if we're entering the Args section
-        if stripped_line == 'Args:':
+        if stripped_line in ['Args:', 'Arguments:']:
             in_args_section = True
             continue
         
@@ -256,23 +286,32 @@ def _parse_docstring_args(docstring: str) -> dict[str, str]:
         # If we're in args section and have content
         if in_args_section and stripped_line:
             # Check for argument definition: "name (type): description" or "name: description"
-            # Also handle multiline descriptions that are indented
-            arg_match = re.match(r'^(\w+)\s*(?:\(([^)]+)\))?\s*:\s*(.*)$', stripped_line)
-            if arg_match:
-                arg_name, arg_type, description = arg_match.groups()
-                current_arg = arg_name.strip()
-                # If type is specified in parentheses, use it
-                if arg_type:
-                    args_section[current_arg] = arg_type.strip()
-                else:
-                    # Try to extract type from description or set as unknown
-                    args_section[current_arg] = "Any"  # Default type when not specified
-            elif current_arg and stripped_line and line.startswith('    '):
-                # This is a continuation of the previous argument's description
-                # We can extract additional type info if needed, but for now just continue
-                pass
+            arg_match = re.match(r'^(\w+)\s*(?:\([^)]+\))?\s*:\s*(.*)$', stripped_line)
+            if not arg_match:
+                continue
+            arg_name = arg_match.group(1).strip()
+            args_section.add(arg_name)
     
     return args_section
+
+
+def _has_returns_section(docstring: str) -> bool:
+    """Check if docstring has a Returns section.
+    
+    Args:
+        docstring: The docstring to check
+        
+    Returns:
+        True if Returns section exists, False otherwise
+    """
+    lines = docstring.split('\n')
+    
+    for line in lines:
+        stripped_line = line.strip()
+        if stripped_line in ['Returns:', 'Return:']:
+            return True
+    
+    return False
 
 
 def _check_function_annotations(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
