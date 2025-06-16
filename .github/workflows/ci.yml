@@ -2,12 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [prd]
-    paths-ignore:
-      - "**/README.md"
-      - "**/.gitignore"
-      - "**/docs/*"
-      - "**/.github/*"
+    branches: [prd, dev, stg]
 
 jobs:
   checkMeds:
@@ -22,4 +17,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check Standard
-        uses: byuawsfhtl/PythonStandardAction@v1.0.9
+        uses: byuawsfhtl/PythonStandardAction@v1.2.0
