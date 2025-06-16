@@ -2,12 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [prd]
-    paths-ignore:
-      - "**/README.md"
-      - "**/.gitignore"
-      - "**/docs/*"
-      - "**/.github/*"
+    branches: [prd, dev, stg]
 
 jobs:
   checkMeds:
