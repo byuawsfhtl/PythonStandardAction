@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [prd]
+    branches: [prd, stg, dev]
 
 jobs:
   standardCheck:
@@ -10,4 +10,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Follow Python Standard
-        uses: byuawsfhtl/PythonStandardAction@v1.0.9
+        uses: byuawsfhtl/PythonStandardAction@v1.2.0
