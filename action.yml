@@ -5,16 +5,16 @@ runs:
   steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
+     
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: "3.12"
-
+     
     - name: Install dependencies from requirements.txt
       shell: bash
-      run: pip install -r requirements.txt
-
+      run: pip install -r "${{ github.action_path }}/requirements.txt"
+     
     - name: Run Check
       shell: bash
       run: python "${{ github.action_path }}/StandardCheck.py"
