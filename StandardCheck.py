@@ -72,10 +72,7 @@ def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] =
     errors.extend(complexity_module.check_complexity(tree, content, str(file_path), ignore_codes, max_complexity, max_indentation))
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):
-            errors.extend(visit_node(node, str(file_path), ignore_codes, ignore_names))
-        else:
-            errors.extend(visit_node(node, str(file_path), ignore_codes, ignore_names))
+        errors.extend(visit_node(node, str(file_path), ignore_codes, ignore_names))
 
     return errors
 
