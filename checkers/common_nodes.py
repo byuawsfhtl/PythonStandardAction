@@ -57,9 +57,9 @@ def check_class(node: ast.ClassDef, file_path: str, ignore_codes: set[str], igno
     if file_utils_module.should_ignore_name(node.name, ignore_names):
         return errors
     
-    # Check naming convention
-    if not patterns_module.is_pascal_case(node.name):
-        error = error_creation_module.create_error(node, 'N801', f"Class name '{node.name}' should use PascalCase", file_path, ignore_codes)
+    # Check naming convention - allow helper classes that start with underscore
+    if not _is_valid_class_name(node.name):
+        error = error_creation_module.create_error(node, 'N801', f"Class name '{node.name}' should use PascalCase (helper classes may start with underscore)", file_path, ignore_codes)
         if error:
             errors.append(error)
     
@@ -73,6 +73,29 @@ def check_class(node: ast.ClassDef, file_path: str, ignore_codes: set[str], igno
         errors.extend(_check_docstring_format(node, docstring, file_path, ignore_codes))
     
     return errors
+
+
+def _is_valid_class_name(name: str) -> bool:
+    """Check if a class name is valid (PascalCase or helper class with underscore).
+    
+    Args:
+        name: The class name to check
+        
+    Returns:
+        True if the name is valid, False otherwise
+    """
+    # Check if it's a regular PascalCase class
+    if patterns_module.is_pascal_case(name):
+        return True
+    
+    # Check if it's a helper class (starts with underscore followed by PascalCase)
+    if name.startswith('_') and len(name) > 1:
+        # Get the part after the underscore
+        class_name_part = name[1:]
+        # Check if the remaining part is PascalCase
+        return patterns_module.is_pascal_case(class_name_part)
+    
+    return False
 
 
 def check_function(node: ast.FunctionDef, file_path: str, ignore_codes: set[str], ignore_names: set[str] = None) -> list[models.StyleError]:
@@ -146,6 +169,25 @@ def _check_name_mangling(node: ast.FunctionDef, file_path: str, ignore_codes: se
     return []
 
 
+def _has_overload_decorator(node: ast.FunctionDef) -> bool:
+    """Check if function has @overload decorator.
+    
+    Args:
+        node: Function definition node
+        
+    Returns:
+        True if function has @overload decorator, False otherwise
+    """
+    for decorator in node.decorator_list:
+        # Handle simple name decorator: @overload
+        if isinstance(decorator, ast.Name) and decorator.id == 'overload':
+            return True
+        # Handle attribute decorator: @typing.overload
+        elif isinstance(decorator, ast.Attribute) and decorator.attr == 'overload':
+            return True
+    return False
+
+
 def _check_function_docstrings(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
     """Check for missing or incorrect function docstring.
 
@@ -158,6 +200,11 @@ def _check_function_docstrings(node: ast.FunctionDef, file_path: str, ignore_cod
         list of style errors related to function docstrings
     """
     errors = []
+    
+    # Skip docstring checks for @overload functions
+    if _has_overload_decorator(node):
+        return errors
+    
     docstring = ast.get_docstring(node)
     if not docstring:
         error = error_creation_module.create_error(
@@ -288,11 +335,30 @@ def _check_missing_returns_section(node: ast.FunctionDef, docstring: str, file_p
         list containing a style error if the Returns section is missing, or empty list otherwise
     """
     errors = []
-    if not _has_returns_section(docstring):
-        error = error_creation_module.create_error(node, 'D307', f"Function '{node.name}' missing Returns section in docstring", file_path, ignore_codes)
+    if not _has_return_or_yield_section(docstring):
+        error = error_creation_module.create_error(node, 'D307', f"Function '{node.name}' missing 'Returns:' or 'Yields:' section in docstring", file_path, ignore_codes)
         if error:
             errors.append(error)
     return errors
+
+
+def _has_return_or_yield_section(docstring: str) -> bool:
+    """Check if docstring has a Returns or Yields section.
+    
+    Args:
+        docstring: The docstring to check
+        
+    Returns:
+        True if Returns or Yields section exists, False otherwise
+    """
+    lines = docstring.split('\n')
+    
+    for line in lines:
+        stripped_line = line.strip()
+        if stripped_line in ['Returns:', 'Return:', 'Yields:', 'Yield:']:
+            return True
+    
+    return False
 
 
 def _parse_docstring_args(docstring: str) -> set[str]:
@@ -334,25 +400,6 @@ def _parse_docstring_args(docstring: str) -> set[str]:
             args_section.add(arg_name)
     
     return args_section
-
-
-def _has_returns_section(docstring: str) -> bool:
-    """Check if docstring has a Returns section.
-    
-    Args:
-        docstring: The docstring to check
-        
-    Returns:
-        True if Returns section exists, False otherwise
-    """
-    lines = docstring.split('\n')
-    
-    for line in lines:
-        stripped_line = line.strip()
-        if stripped_line in ['Returns:', 'Return:']:
-            return True
-    
-    return False
 
 
 def _check_function_annotations(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
