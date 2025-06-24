@@ -32,7 +32,7 @@ def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_nam
     
     if isinstance(node, ast.ClassDef):
         return common_nodes_module.check_class(node, file_path, ignore_codes, ignore_names)
-    elif isinstance(node, ast.FunctionDef):
+    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         return common_nodes_module.check_function(node, file_path, ignore_codes, ignore_names)
     elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
         return common_nodes_module.check_variable(node, file_path, ignore_codes, ignore_names)
