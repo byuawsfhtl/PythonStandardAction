@@ -231,7 +231,7 @@ def _check_docstring_format(node: ast.FunctionDef|ast.ClassDef, docstring: str, 
         list of style errors found
     """
     errors = []
-    if not docstring:
+    if not docstring.strip():
         return errors
     summary = docstring.split('\n\n')[0].strip()
     first_line = summary.split('\n')[0].strip()
