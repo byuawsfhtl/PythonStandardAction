@@ -3,7 +3,7 @@ from typing import Optional
 
 import models as models
 
-def check_complexity(tree: ast.Module, content: str, file_path: str, ignore_codes: set[str], max_complexity: int = 10, max_indentation: int = 4) -> list[models.StyleError]:
+def check_complexity(tree: ast.Module, content: str, file_path: str, ignore_codes: set[str], max_complexity: int = 15, max_indentation: int = 4) -> list[models.StyleError]:
     """Check cyclomatic complexity and indentation depth for all functions in a file.
     
     Args:
@@ -51,7 +51,7 @@ def _check_function_complexity(node: ast.FunctionDef, file_path: str, ignore_cod
         line_number=getattr(node, 'lineno', 0),
         column=getattr(node, 'col_offset', 0),
         error_code='C901',
-        message=f"Function '{node.name}' is too complex ({complexity} cyclomatic complexity where the max is 10). Consider breaking into helper functions"
+        message=f"Function '{node.name}' is too complex ({complexity} cyclomatic complexity where the max is {max_complexity}). Consider breaking into helper functions"
     )
 
 
@@ -76,12 +76,11 @@ def _calculate_cyclomatic_complexity(node: ast.FunctionDef) -> int:
         elif isinstance(child, ast.Assert):
             complexity += 1
         elif isinstance(child, ast.BoolOp):
-            # Each additional condition in and/or adds complexity
+            # Each additional condition in and/or adds 1 to complexity
             complexity += len(child.values) - 1
-        elif isinstance(child, ast.ListComp|ast.SetComp|ast.DictComp|ast.GeneratorExp):
-            # List comprehensions with conditions add complexity
-            for generator in child.generators:
-                complexity += len(generator.ifs)
+        elif isinstance(child, (ast.ListComp|ast.SetComp|ast.DictComp|ast.GeneratorExp|ast.Call|ast.Lambda)):
+            # Don't count these as complexity
+            pass
     
     return complexity
 
