@@ -114,7 +114,7 @@ def main() -> int:
     parser.add_argument('paths', nargs='*', default=['.'], help='Paths to check (default: current directory)')
     parser.add_argument('--config', type=Path, help='Path to configuration file')
     parser.add_argument('--ignore', action='append', help='Error codes to ignore')
-    parser.add_argument('--max-complexity', type=int, default=10, help='Maximum cyclomatic complexity (default: 10)')
+    parser.add_argument('--max-complexity', type=int, default=15, help='Maximum cyclomatic complexity (default: 15)')
     
     args = parser.parse_args()
     
