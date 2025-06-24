@@ -19,7 +19,7 @@ def check_complexity(tree: ast.Module, content: str, file_path: str, ignore_code
     """
     errors = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         functional_error = _check_function_complexity(node, file_path, ignore_codes, max_complexity)
         if functional_error:
@@ -30,7 +30,7 @@ def check_complexity(tree: ast.Module, content: str, file_path: str, ignore_code
     return errors
 
 
-def _check_function_complexity(node: ast.FunctionDef, file_path: str, ignore_codes: set[str], max_complexity: int) -> Optional[models.StyleError]:
+def _check_function_complexity(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str, ignore_codes: set[str], max_complexity: int) -> Optional[models.StyleError]:
     """Check cyclomatic complexity of a single function.
     
     Args:
@@ -55,7 +55,7 @@ def _check_function_complexity(node: ast.FunctionDef, file_path: str, ignore_cod
     )
 
 
-def _calculate_cyclomatic_complexity(node: ast.FunctionDef) -> int:
+def _calculate_cyclomatic_complexity(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
     """Calculate cyclomatic complexity of a function.
     
     Args:
@@ -85,7 +85,7 @@ def _calculate_cyclomatic_complexity(node: ast.FunctionDef) -> int:
     return complexity
 
 
-def _is_too_deeply_indented(node: ast.FunctionDef, content: str, file_path: str, ignore_codes: set[str], max_allowed_depth: int) -> Optional[models.StyleError]:
+def _is_too_deeply_indented(node: ast.FunctionDef | ast.AsyncFunctionDef, content: str, file_path: str, ignore_codes: set[str], max_allowed_depth: int) -> Optional[models.StyleError]:
     """Check indentation depth of a single function.
     
     Args:
@@ -116,7 +116,7 @@ def _is_too_deeply_indented(node: ast.FunctionDef, content: str, file_path: str,
     )
 
 
-def _get_max_indent_depth_from_source(node: ast.FunctionDef, content: str) -> int:
+def _get_max_indent_depth_from_source(node: ast.FunctionDef | ast.AsyncFunctionDef, content: str) -> int:
     """Calculate maximum indentation depth within a function using source code.
     
     Args:
