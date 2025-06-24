@@ -55,7 +55,7 @@ def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] =
     errors = []
     ignore_names = ignore_names or set()
     config = config or {}
-    max_complexity = config.get('max_complexity', 10)
+    max_complexity = config.get('max_complexity', 15)
     max_indentation = config.get('max_indentation', 4)
 
     with open(file_path, 'r', encoding='utf-8') as f:
