@@ -98,7 +98,7 @@ def _is_valid_class_name(name: str) -> bool:
     return False
 
 
-def check_function(node: ast.FunctionDef, file_path: str, ignore_codes: set[str], ignore_names: set[str] = None) -> list[models.StyleError]:
+def check_function(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str, ignore_codes: set[str], ignore_names: set[str] = None) -> list[models.StyleError]:
     """Check function definition.
 
     Args:
@@ -126,7 +126,7 @@ def check_function(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]
     return errors
 
 
-def _check_function_name(node: ast.FunctionDef, file_path: str, ignore_codes: set[str], is_test_file: bool) -> list[models.StyleError]:
+def _check_function_name(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str, ignore_codes: set[str], is_test_file: bool) -> list[models.StyleError]:
     """Check function naming convention.
 
     Args:
@@ -150,7 +150,7 @@ def _check_function_name(node: ast.FunctionDef, file_path: str, ignore_codes: se
     return []
 
 
-def _check_name_mangling(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+def _check_name_mangling(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
     """Check for inappropriate name mangling.
 
     Args:
@@ -169,7 +169,7 @@ def _check_name_mangling(node: ast.FunctionDef, file_path: str, ignore_codes: se
     return []
 
 
-def _has_overload_decorator(node: ast.FunctionDef) -> bool:
+def _has_overload_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """Check if function has @overload decorator.
     
     Args:
@@ -188,7 +188,7 @@ def _has_overload_decorator(node: ast.FunctionDef) -> bool:
     return False
 
 
-def _check_function_docstrings(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+def _check_function_docstrings(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
     """Check for missing or incorrect function docstring.
 
     Args:
@@ -218,7 +218,7 @@ def _check_function_docstrings(node: ast.FunctionDef, file_path: str, ignore_cod
     return errors
 
 
-def _check_docstring_format(node: ast.FunctionDef|ast.ClassDef, docstring: str, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+def _check_docstring_format(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef, docstring: str, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
     """Check docstring formatting rules.
     
     Args:
@@ -253,7 +253,7 @@ def _check_docstring_format(node: ast.FunctionDef|ast.ClassDef, docstring: str, 
     return errors
 
 
-def _check_function_docstring(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+def _check_function_docstring(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
     """Check function docstring completeness.
 
     Args:
@@ -282,7 +282,7 @@ def _check_function_docstring(node: ast.FunctionDef, file_path: str, ignore_code
 
     return errors
 
-def _check_missing_doc_args(node: ast.FunctionDef, func_args: list[str], doc_args: set[str], file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+def _check_missing_doc_args(node: ast.FunctionDef | ast.AsyncFunctionDef, func_args: list[str], doc_args: set[str], file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
     """Check for arguments in signature that are missing in the docstring.
 
     Args:
@@ -303,7 +303,7 @@ def _check_missing_doc_args(node: ast.FunctionDef, func_args: list[str], doc_arg
                 errors.append(error)
     return errors
 
-def _check_extra_doc_args(node: ast.FunctionDef, func_args: list[str], doc_args: set[str], file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+def _check_extra_doc_args(node: ast.FunctionDef | ast.AsyncFunctionDef, func_args: list[str], doc_args: set[str], file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
     """Check for arguments documented in the docstring but missing from the signature.
 
     Args:
@@ -325,7 +325,7 @@ def _check_extra_doc_args(node: ast.FunctionDef, func_args: list[str], doc_args:
                 errors.append(error)
     return errors
 
-def _check_missing_returns_section(node: ast.FunctionDef, docstring: str, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+def _check_missing_returns_section(node: ast.FunctionDef | ast.AsyncFunctionDef, docstring: str, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
     """Check if a Returns section is missing from the docstring.
 
     Args:
@@ -405,7 +405,7 @@ def _parse_docstring_args(docstring: str) -> set[str]:
     return args_section
 
 
-def _check_function_annotations(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+def _check_function_annotations(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
     """Check function type annotations.
     
     Args:
@@ -436,7 +436,7 @@ def _check_function_annotations(node: ast.FunctionDef, file_path: str, ignore_co
     return errors
 
 
-def _check_mutable_defaults(node: ast.FunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+def _check_mutable_defaults(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
     """Check for mutable default arguments.
     
     Args:
