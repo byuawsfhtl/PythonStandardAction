@@ -76,12 +76,11 @@ def _calculate_cyclomatic_complexity(node: ast.FunctionDef) -> int:
         elif isinstance(child, ast.Assert):
             complexity += 1
         elif isinstance(child, ast.BoolOp):
-            # Each additional condition in and/or adds complexity
+            # Each additional condition in and/or adds 1 to complexity
             complexity += len(child.values) - 1
-        elif isinstance(child, ast.ListComp|ast.SetComp|ast.DictComp|ast.GeneratorExp):
-            # List comprehensions with conditions add complexity
-            for generator in child.generators:
-                complexity += len(generator.ifs)
+        elif isinstance(child, (ast.ListComp|ast.SetComp|ast.DictComp|ast.GeneratorExp|ast.Call|ast.Lambda)):
+            # Don't count these as complexity
+            pass
     
     return complexity
 
