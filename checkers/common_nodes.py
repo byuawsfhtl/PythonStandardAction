@@ -233,16 +233,19 @@ def _check_docstring_format(node: ast.FunctionDef|ast.ClassDef, docstring: str, 
     errors = []
     if not docstring:
         return errors
-    first_line = docstring.split('\n')[0].strip()
+    summary = docstring.split('\n\n')[0].strip()
+    first_line = summary.split('\n')[0].strip()
+    last_line = summary.split('\n')[-1].strip()
     
     # Check capitalization
     if first_line and first_line[0].islower():
         error = error_creation_module.create_error(node, 'D200', "Docstring should start with capital letter", file_path, ignore_codes)
         if error:
             errors.append(error)
+
     
     # Check ending punctuation
-    if first_line and not first_line.endswith('.'):
+    if last_line and not last_line.endswith('.'):
         error = error_creation_module.create_error(node, 'D201', "Docstring should end with period", file_path, ignore_codes)
         if error:
             errors.append(error)
