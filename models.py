@@ -70,7 +70,20 @@ SPECIAL_METHODS: FrozenSet[str] = frozenset([
     '__ior__', '__neg__', '__pos__', '__abs__', '__invert__', '__complex__',
     '__int__', '__float__', '__round__', '__index__', '__enter__',
     '__exit__', '__await__', '__aiter__', '__anext__', '__aenter__',
-    '__aexit__', '__new__'
+    '__aexit__', '__new__', '__post_init__', '__radd__', '__rsub__', 
+    '__rmul__', '__rmatmul__', '__rtruediv__', '__rfloordiv__',
+    '__rmod__', '__rdivmod__', '__rpow__', '__rlshift__',
+    '__rrshift__', '__rand__', '__rxor__', '__ror__', '__copy__',
+    '__deepcopy__', '__getattr__', '__getattribute__', '__setattr__',
+    '__delattr__', '__dir__', '__get__', '__set__', '__delete__',
+    '__set_name__', '__slots__', '__weakref__', '__missing__',
+    '__length_hint__', '__class_getitem__', '__init_subclass__',
+    '__prepare__', '__instancecheck__', '__subclasscheck__',
+    '__reduce__', '__reduce_ex__', '__getnewargs__', '__getnewargs_ex__',
+    '__getstate__', '__setstate__', '__sizeof__', '__fspath__',
+    '__buffer__', '__release_buffer__', '__match_args__', '__ceil__',
+    '__floor__', '__trunc__', '__mro_entries__', '__orig_bases__',
+    '__parameters__', '__args__', '__origin__', 
 ])
 
 SPECIAL_VARIABLES: FrozenSet[str] = frozenset(['self', 'cls'])
