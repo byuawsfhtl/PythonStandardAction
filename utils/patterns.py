@@ -10,8 +10,8 @@ def is_snake_case(name_of_var: str) -> bool:
     Returns:
         True if name is valid snake_case
     """
-    # Allow single letters, constants (ALL_CAPS), and private names
-    if len(name_of_var) == 1 or name_of_var.isupper() or name_of_var.startswith('_'):
+    # Allow single letters, constants (ALL_CAPS), private names, and visit_ functions
+    if len(name_of_var) == 1 or name_of_var.isupper() or name_of_var.startswith('_') or name_of_var.startswith('visit_'):
         return True
         
     # Standard snake_case pattern
