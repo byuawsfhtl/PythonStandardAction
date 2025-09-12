@@ -6,39 +6,31 @@ As a lab, certain standards have been generally adopted, but have had a hard tim
 
 ## Enforced Styles
 
-1. Camel case is enforced on all function and variable name.
+1. snake_case is enforced on all function and variable name.
 
 2. The use of \_\_ or name mangling is disallowed.
 
-3. Docstring argument definitions must not start with a capital letter and must not use a period at the end. To indicate additional information in a sentence like format, use semicolons to separate sections. The first letters of these sections can also not be capitalized.
+3. Docstring argument definitions must start with a capital letter and must use a period at the end. To indicate additional information in a sentence like format, use semicolons to separate sections. The first letters of these sections should also be capitalized.
 
 4. Functions are required to have a docstring.
 
-5. Function arguments must have a type annotation.
+5. Function arguments may not use mutable items(list, set, dict) as defaults, as python handles defaults stupidly.
 
-6. Function arguments may not use mutable items(list, set, dict) as defaults, as python handles defaults stupidly.
+6. Functions must specify a return type.
 
-7. Functions must specify a return type.
+7. Class names must be in pascal case (ex. ExampleClass)
 
-8. Class names must be in pascal case (ex. ExampleClass)
+8. First line of docstring must end with period
 
-9. First line of docstring must end with period
+9. Classes must have a docstring
 
-10. Classes must have a docstring
+10. Function arguments must be documented in a section started with `Args: \n`
 
-11. Function rguments must be documented in a section started with `Args: \n`
+11. Docstring argument names must be up to date with the function arguments' names
 
-12. Docstring argument type must be up to date with the function arguments' type annotations
+12. Argument defaults must be documented in the `Args: ` section in a section of their corresponding arguments saying `defaults to {default value}`
 
-13. Docstring argument names must be up to date with the function arguments' names
-
-14. When specifying a docstring arguments type, if the argument has a default, the type must be followed with `, optional`
-
-15. Argument defaults must be documented in the `Args: ` section in a section of their corresponding arguments saying `defaults to {default value}`
-
-16. A function's return type must be documented in a section started with `Returns: \n`
-
-17. A function's return type must be exactly equal to the documented type
+13. A function's return value must be documented in a section started with `Returns: \n`
 
 ## Adding action to your workflow
 
@@ -47,7 +39,7 @@ This action is best used in the same section as the meds action. Just add it as 
 ```github
         steps:
             - name: Follow Python Standard
-              uses: byuawsfhtl/PythonStandardAction@v1.1.0
+              uses: byuawsfhtl/PythonStandardAction@v1.2.0
 ```
 
 ## Excluding files from the check

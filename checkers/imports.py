@@ -1,4 +1,5 @@
 import ast
+import re
 from pathlib import Path
 
 import models as models
@@ -158,17 +159,24 @@ def _check_unused_imports(imports: list[ast.Import | ast.ImportFrom], names_used
         the list of unused import errors, if any
     """
     errors = []
+    
+    # Read file content for simple text-based checks
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            file_content = f.read()
+    except:
+        file_content = ""
 
     for imp in imports:
         if isinstance(imp, ast.Import):
-            errors.extend(_check_unused_import_nodes(imp, names_used, file_path, ignore_codes))
+            errors.extend(_check_unused_import_nodes(imp, names_used, file_path, ignore_codes, file_content))
         elif isinstance(imp, ast.ImportFrom):
-            errors.extend(_check_unused_from_import_nodes(imp, names_used, file_path, ignore_codes))
+            errors.extend(_check_unused_from_import_nodes(imp, names_used, file_path, ignore_codes, file_content))
 
     return errors
 
 
-def _check_unused_import_nodes(imp: ast.Import, names_used: set[str], file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+def _check_unused_import_nodes(imp: ast.Import, names_used: set[str], file_path: str, ignore_codes: set[str], file_content: str) -> list[models.StyleError]:
     """Check unused names in an ast.Import node.
     
     Args:
@@ -176,22 +184,27 @@ def _check_unused_import_nodes(imp: ast.Import, names_used: set[str], file_path:
         names_used: the complete set of the lib names used within the file
         file_path: Path to file being checked
         ignore_codes: set of error codes to ignore
+        file_content: content of the file for text-based searching
 
     Returns:
         the list of unused import errors, if any
     """
     errors = []
+    
     for alias in imp.names:
         imported_name = alias.asname if alias.asname else alias.name.split('.')[0]
-        if imported_name in names_used:
+        
+        # Skip if name is used in AST or appears in file content (covers string annotations, TYPE_CHECKING, etc.)
+        if imported_name in names_used or re.search(rf'\b{re.escape(imported_name)}\b', file_content):
             continue
+            
         error = error_creation_module.create_error(imp, 'I101', f"Unused import '{imported_name}'", file_path, ignore_codes)
         if error:
             errors.append(error)
     return errors
 
 
-def _check_unused_from_import_nodes(imp: ast.ImportFrom, names_used: set[str], file_path: str, ignore_codes: set[str]) -> list[models.StyleError]:
+def _check_unused_from_import_nodes(imp: ast.ImportFrom, names_used: set[str], file_path: str, ignore_codes: set[str], file_content: str) -> list[models.StyleError]:
     """Check unused names in an ast.ImportFrom node.
     
     Args:
@@ -199,17 +212,26 @@ def _check_unused_from_import_nodes(imp: ast.ImportFrom, names_used: set[str], f
         names_used: the complete set of the lib names used within the file
         file_path: Path to file being checked
         ignore_codes: set of error codes to ignore
+        file_content: content of the file for text-based searching
 
     Returns:
         an unused import error, or None
     """
     errors = []
+    
+    # Never flag __future__ imports as unused
+    if imp.module == '__future__':
+        return errors
+    
     for alias in imp.names:
         if alias.name == '*':
             continue  # wildcard imports not checked here
         imported_name = alias.asname if alias.asname else alias.name
-        if imported_name in names_used:
+        
+        # Skip if name is used in AST or appears in file content (covers string annotations, TYPE_CHECKING, etc.)
+        if imported_name in names_used or re.search(rf'\b{re.escape(imported_name)}\b', file_content):
             continue
+            
         error = error_creation_module.create_error(imp, 'I101', f"Unused import '{imported_name}' from '{imp.module or '.'}'", file_path, ignore_codes)
         if error:
             errors.append(error)
@@ -251,11 +273,23 @@ def _check_relative_imports(imports: list[ast.ImportFrom], file_path: str, ignor
         list of style errors found
     """
     errors = []
+    
+    # Check if this is an __init__.py file - allow all relative imports there
+    file_path_obj = Path(file_path)
+    is_init_file = file_path_obj.name == '__init__.py'
+    
     for imp in imports:
-        if imp.level <= 0:
+        if imp.level <= 0 or is_init_file:
             continue
-        # Relative import (starts with dots)
-        error = error_creation_module.create_error(imp, 'I103', f"Relative import should be absolute", file_path, ignore_codes)
+            
+        # Flag deep relative imports (..module, ...module, etc.) as potentially problematic
+        error = error_creation_module.create_error(
+            imp, 
+            'I103', 
+            f"Deep relative import (level {imp.level}) should be avoided - consider using absolute imports", 
+            file_path, 
+            ignore_codes
+        )
         if error:
             errors.append(error)
     return errors
