@@ -338,7 +338,7 @@ def _check_missing_returns_section(node: ast.FunctionDef | ast.AsyncFunctionDef,
         list containing a style error if the Returns section is missing, or empty list otherwise
     """
     errors = []
-    if not _has_return_or_yield_section(docstring):
+    if not _has_return_or_yield_section(docstring) and not (isinstance(node.returns, ast.Constant) and node.returns.value is None):
         error = error_creation_module.create_error(node, 'D307', f"Function '{node.name}' missing 'Returns:' or 'Yields:' section in docstring", file_path, ignore_codes)
         if error:
             errors.append(error)
