@@ -117,45 +117,36 @@ def _is_too_deeply_indented(node: ast.FunctionDef | ast.AsyncFunctionDef, conten
 
 
 def _get_max_indent_depth_from_source(node: ast.FunctionDef | ast.AsyncFunctionDef, content: str) -> int:
-    """Calculate maximum indentation depth within a function using source code.
-    
+    """Calculate maximum nesting depth using AST to avoid formatting false positives.
+
     Args:
         node: Function definition node
-        content: Original file content as string
-        
+        content: Original file content (unused in AST approach but kept for signature)
+
     Returns:
-        Maximum indentation depth within the function
+        Maximum logic nesting depth
     """
-    lines = content.split('\n')
-    
-    # Get the function's line range
-    start_line = node.lineno - 1  # Convert to 0-based indexing
-    
-    # Find the end line of the function
-    end_line = _find_function_end_line(lines, start_line)
-    
-    # Get function source lines
-    function_lines = lines[start_line:end_line + 1]
-    
-    # Find the base indentation of the function definition
-    func_def_line = function_lines[0]
-    base_indent = len(func_def_line) - len(func_def_line.lstrip())
-    
     max_depth = 0
-    
-    # Check indentation of each line within the function
-    for line in function_lines[1:]:  # Skip the function definition line
-        if not line.strip():
+    base_col = node.col_offset
+
+    BLOCK_NODES = (
+        ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.With, ast.AsyncWith,
+        ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+        getattr(ast, 'Match', type(None)), getattr(ast, 'Case', type(None))
+    )
+
+    for child in ast.walk(node):
+        if child is node:
             continue
-        current_indent = len(line) - len(line.lstrip())
-        if current_indent <= base_indent:
-            continue
-        function_body_indent = base_indent + 4
-        if current_indent < function_body_indent:
-            continue
-        depth = (current_indent - function_body_indent) // 4 + 1
-        max_depth = max(max_depth, depth)
-    
+
+        if isinstance(child, BLOCK_NODES):
+            # Calculate depth based on column offset relative to the function definition.
+            # We assume standard 4-space indentation.
+            # (col_offset - base) // 4 gives the block level (0 for function body)
+            # We add 1 because the content *inside* this block is one level deeper.
+            depth = (child.col_offset - base_col) // 4 + 1
+            max_depth = max(max_depth, depth)
+
     return max_depth
 
 
