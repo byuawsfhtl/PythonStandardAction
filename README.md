@@ -1,36 +1,24 @@
 # PythonStandardAction
 
-_A github action to be used across python projects in the byuawsfhtl organization_
+*A github action to be used across python projects in the byuawsfhtl organization*
 
 As a lab, certain standards have been generally adopted, but have had a hard time being actually implemented. This action intends to fix that by acting like a linter, enforcing certain styles.
 
 ## Enforced Styles
 
 1. snake_case is enforced on all function and variable name.
-
-2. The use of \_\_ or name mangling is disallowed.
-
+2. The use of  or name mangling is disallowed.
 3. Docstring argument definitions must start with a capital letter and must use a period at the end. To indicate additional information in a sentence like format, use semicolons to separate sections. The first letters of these sections should also be capitalized.
-
 4. Functions are required to have a docstring.
-
 5. Function arguments may not use mutable items(list, set, dict) as defaults, as python handles defaults stupidly.
-
 6. Functions must specify a return type.
-
-7. Class names must be in pascal case (ex. ExampleClass)
-
+7. Class names must be in PascalCase
 8. First line of docstring must end with period
-
 9. Classes must have a docstring
-
 10. Function arguments must be documented in a section started with `Args: \n`
-
 11. Docstring argument names must be up to date with the function arguments' names
-
-12. Argument defaults must be documented in the `Args: ` section in a section of their corresponding arguments saying `defaults to {default value}`
-
-13. A function's return value must be documented in a section started with `Returns: \n`
+12. Argument defaults must be documented in the `Args:`  section in a section of their corresponding arguments saying `defaults to {default value}`
+13. A function's return value must be documented in a section started with `Returns: \n` unless the function is anotated as returning None.
 
 ## Adding action to your workflow
 
@@ -74,4 +62,15 @@ The above example ignores the sleep_for_retry function when applying standards a
 
 ## Running locally so you don't have to wait on github actions
 
-There isn't a way to do this yet
+from the root fo the repo you're trying to check, run the following in a terminal:
+
+```cmd
+python "path-to-this-repo/StandardCheck.py"
+```
+
+So, if I were trying to run it on TreeTapper, and both TreeTapper and PythonStandardAction were in the same folder, I would run
+
+```cmd
+python "../PythonStandardAction/StandardCheck.py"
+```
+
