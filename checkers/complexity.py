@@ -3,7 +3,7 @@ from typing import Optional
 
 import models as models
 
-def check_complexity(tree: ast.Module, content: str, file_path: str, ignore_codes: set[str], max_complexity: int = 15, max_indentation: int = 4) -> list[models.StyleError]:
+def check_complexity(tree: ast.AST, content: str, file_path: str, ignore_codes: set[str], max_complexity: int = 15, max_indentation: int = 4) -> list[models.StyleError]:
     """Check cyclomatic complexity and indentation depth for all functions in a file.
     
     Args:

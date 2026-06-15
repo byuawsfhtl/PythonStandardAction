@@ -16,7 +16,7 @@ import checkers.security as security_module
 import checkers.complexity as complexity_module
 
 
-def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_names: set[str] = None) -> list[models.StyleError]:
+def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_names: set[str] = set()) -> list[models.StyleError]:
     """Visit an AST node and perform checks.
     
     Args:
@@ -28,7 +28,6 @@ def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_nam
     Returns:
         list of style errors found
     """
-    ignore_names = ignore_names or set()
     
     if isinstance(node, ast.ClassDef):
         return common_nodes_module.check_class(node, file_path, ignore_codes, ignore_names)
@@ -40,7 +39,7 @@ def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_nam
         return []
 
 
-def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] = None, config: dict[str, Any] = None) -> list[models.StyleError]:
+def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] = set(), config: dict[str, Any] | None = None) -> list[models.StyleError]:
     """Check a single Python file.
 
     Args:
@@ -52,9 +51,10 @@ def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] =
     Returns:
         list of style errors found
     """
+    if not config:
+        config = {}
+
     errors = []
-    ignore_names = ignore_names or set()
-    config = config or {}
     max_complexity = config.get('max_complexity', 15)
     max_indentation = config.get('max_indentation', 4)
 

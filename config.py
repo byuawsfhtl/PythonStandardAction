@@ -48,7 +48,7 @@ def load_ignore_names() -> set[str]:
     Returns:
         Set of names to ignore in style checking
     """
-    ignore_names = set()
+    ignore_names: set = set()
     ignore_file = Path('.standardignore')
     
     if not ignore_file.exists():

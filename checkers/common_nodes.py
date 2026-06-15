@@ -6,7 +6,7 @@ import utils.file_utils as file_utils_module
 import utils.patterns as patterns_module
 import checkers.error_creation as error_creation_module
 
-def check_variable(node: ast.Name, file_path: str, ignore_codes: set[str], ignore_names: set[str] = None) -> list[models.StyleError]:
+def check_variable(node: ast.Name, file_path: str, ignore_codes: set[str], ignore_names: set[str] = set()) -> list[models.StyleError]:
     """Check variable naming.
     
     Args:
@@ -18,8 +18,7 @@ def check_variable(node: ast.Name, file_path: str, ignore_codes: set[str], ignor
     Returns:
         list of style errors found
     """
-    errors = []
-    ignore_names = ignore_names or set()
+    errors: list[models.StyleError] = []
     
     # Skip if name should be ignored
     if file_utils_module.should_ignore_name(node.id, ignore_names):
@@ -38,7 +37,7 @@ def check_variable(node: ast.Name, file_path: str, ignore_codes: set[str], ignor
     return errors
 
 
-def check_class(node: ast.ClassDef, file_path: str, ignore_codes: set[str], ignore_names: set[str] = None) -> list[models.StyleError]:
+def check_class(node: ast.ClassDef, file_path: str, ignore_codes: set[str], ignore_names: set[str] = set()) -> list[models.StyleError]:
     """Check class definition.
     
     Args:
@@ -50,8 +49,7 @@ def check_class(node: ast.ClassDef, file_path: str, ignore_codes: set[str], igno
     Returns:
         list of style errors found
     """
-    errors = []
-    ignore_names = ignore_names or set()
+    errors: list[models.StyleError] = []
     
     # Skip if name should be ignored
     if file_utils_module.should_ignore_name(node.name, ignore_names):
@@ -98,7 +96,7 @@ def _is_valid_class_name(name: str) -> bool:
     return False
 
 
-def check_function(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str, ignore_codes: set[str], ignore_names: set[str] = None) -> list[models.StyleError]:
+def check_function(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str, ignore_codes: set[str], ignore_names: set[str] = set()) -> list[models.StyleError]:
     """Check function definition.
 
     Args:
@@ -110,8 +108,7 @@ def check_function(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str,
     Returns:
         list of style errors found
     """
-    errors = []
-    ignore_names = ignore_names or set()
+    errors: list[models.StyleError] = []
     is_test_file = 'test' in file_path.lower()
 
     if file_utils_module.should_ignore_name(node.name, ignore_names):
@@ -199,7 +196,7 @@ def _check_function_docstrings(node: ast.FunctionDef | ast.AsyncFunctionDef, fil
     Returns:
         list of style errors related to function docstrings
     """
-    errors = []
+    errors: list[models.StyleError] = []
     
     # Skip docstring checks for @overload functions
     if _has_overload_decorator(node):
@@ -230,7 +227,7 @@ def _check_docstring_format(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.C
     Returns:
         list of style errors found
     """
-    errors = []
+    errors: list[models.StyleError] = []
     if not docstring:
         return errors
     summary = docstring.split('\n\n')[0].strip()
@@ -264,7 +261,7 @@ def _check_function_docstring(node: ast.FunctionDef | ast.AsyncFunctionDef, file
     Returns:
         list of style errors found
     """
-    errors = []
+    errors: list[models.StyleError] = []
     docstring = ast.get_docstring(node)
 
     if not docstring:
