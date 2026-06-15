@@ -39,7 +39,7 @@ def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_nam
         return []
 
 
-def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] = set(), config: dict[str, Any] = None) -> list[models.StyleError]:
+def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] = set(), config: dict[str, Any] | None = None) -> list[models.StyleError]:
     """Check a single Python file.
 
     Args:
@@ -51,6 +51,9 @@ def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] =
     Returns:
         list of style errors found
     """
+    if not config:
+        config = {}
+
     errors = []
     max_complexity = config.get('max_complexity', 15)
     max_indentation = config.get('max_indentation', 4)
