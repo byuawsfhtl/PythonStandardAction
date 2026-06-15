@@ -50,12 +50,12 @@ The above entries in a `.standardignore` would have the checker skip over the fo
 
 Using the `.standardignore` file specified in the section above, specific function and variable names can be skipped over on the check.
 
-The syntax to do so is the use of the `!` before the name of the variable/function to ignore.
+The syntax to do so is the use of the `name:` before the name of the variable/function to ignore.
 
 For example
 
 ```cmd
-!sleep_for_retry
+name: sleep_for_retry
 ```
 
 The above example ignores the sleep_for_retry function when applying standards as the name is required as it is an overwrite of an outside modules functionality.
