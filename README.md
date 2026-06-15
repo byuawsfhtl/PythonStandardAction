@@ -74,3 +74,13 @@ So, if I were trying to run it on TreeTapper, and both TreeTapper and PythonStan
 python "../PythonStandardAction/StandardCheck.py"
 ```
 
+## Notes about the MyPy checker step
+
+The MyPy checker step is going to default to running with the '--strict' call on every file in the application unless the entire file is ignored. Note that it doesn't ignore specific functions, classes, or lines since they are instead ignored with the usual "# type: ignore" comment that it otherwise uses. If you want to run this with different MyPy settings and arguments, simply add "mypyargs: [Your arguments here]"  to the ".standardignore" file in the format as follows:
+
+```cmd
+mypyargs: --ignore-missing-imports --deprecated-calls-exclude
+```
+
+Note that doing something like this will automatically disable the '--strict' tag in MyPy unless it is specifically included in the arguments. Regardless of if custom args are passed in or not, this step will automatically figure out the needed file path arguments so it is not necessary to add this to the beginning and will actually cause errors if you do.
+
