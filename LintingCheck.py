@@ -45,11 +45,11 @@ def main() -> int:
         all_errors.sort(key=lambda e: (e.file_path, e.line_number))
         for mypy_error in all_errors:
             print(mypy_error)
-        print(f"\nFound {len(all_errors)} mypy errors.")
+        print(f"\nFound {len(all_errors)} MyPy errors.")
         return 1
 
     else:
-        print("Passed all mypy checks!")
+        print("Passed all MyPy checks!")
         return 0
 
 
