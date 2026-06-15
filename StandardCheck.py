@@ -28,7 +28,6 @@ def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_nam
     Returns:
         list of style errors found
     """
-    ignore_names = ignore_names or set()
     
     if isinstance(node, ast.ClassDef):
         return common_nodes_module.check_class(node, file_path, ignore_codes, ignore_names)
@@ -53,8 +52,6 @@ def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] =
         list of style errors found
     """
     errors = []
-    ignore_names = ignore_names or set()
-    config = config or {}
     max_complexity = config.get('max_complexity', 15)
     max_indentation = config.get('max_indentation', 4)
 

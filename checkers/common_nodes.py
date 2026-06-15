@@ -19,7 +19,6 @@ def check_variable(node: ast.Name, file_path: str, ignore_codes: set[str], ignor
         list of style errors found
     """
     errors: list[models.StyleError] = []
-    ignore_names = ignore_names or set()
     
     # Skip if name should be ignored
     if file_utils_module.should_ignore_name(node.id, ignore_names):
@@ -51,7 +50,6 @@ def check_class(node: ast.ClassDef, file_path: str, ignore_codes: set[str], igno
         list of style errors found
     """
     errors: list[models.StyleError] = []
-    ignore_names = ignore_names or set()
     
     # Skip if name should be ignored
     if file_utils_module.should_ignore_name(node.name, ignore_names):
@@ -111,7 +109,6 @@ def check_function(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str,
         list of style errors found
     """
     errors: list[models.StyleError] = []
-    ignore_names = ignore_names or set()
     is_test_file = 'test' in file_path.lower()
 
     if file_utils_module.should_ignore_name(node.name, ignore_names):
