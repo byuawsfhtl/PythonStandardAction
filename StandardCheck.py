@@ -16,7 +16,7 @@ import checkers.security as security_module
 import checkers.complexity as complexity_module
 
 
-def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_names: set[str] = None) -> list[models.StyleError]:
+def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_names: set[str] = set()) -> list[models.StyleError]:
     """Visit an AST node and perform checks.
     
     Args:
@@ -40,7 +40,7 @@ def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_nam
         return []
 
 
-def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] = None, config: dict[str, Any] = None) -> list[models.StyleError]:
+def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] = set(), config: dict[str, Any] = {}) -> list[models.StyleError]:
     """Check a single Python file.
 
     Args:
