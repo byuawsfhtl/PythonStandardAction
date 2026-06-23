@@ -33,12 +33,12 @@ def main() -> int:
             if should_ignore_file(path, ignore_patterns):
                 continue
             else:
-                ignored_mypy_normal_output, mypy_errors, ignored_mypy_return_value = run_mypy_on_file(path_str, mypy_args)
-                all_errors.extend(mypy_errors) 
+                mypy_return = run_mypy_on_file(path_str, mypy_args)
+                all_errors.extend(mypy_return) 
         elif path.is_dir():
             print("Found a directory")
-            mypy_errors = run_mypy_on_directory(path, ignore_patterns, mypy_args)
-            all_errors.extend(mypy_errors)
+            mypy_return = run_mypy_on_directory(path, ignore_patterns, mypy_args)
+            all_errors.extend(mypy_return)
         else:
             print(f"Warning: Path not found: {path}", file=stderr)
 
@@ -71,13 +71,13 @@ def run_mypy_on_directory(directory: Path, ignore_patterns: Optional[PathSpec], 
             continue
             
         else:
-            ignored_mypy_normal_output, mypy_errors, ignored_mypy_return_value = run_mypy_on_file(str(file_path), args)
+            mypy_errors = run_mypy_on_file(str(file_path), args)
             errors_in_directory.extend(mypy_errors)
     
     return errors_in_directory
 
 
-def run_mypy_on_file(file_path_string: str, args: list[str] | None = None) -> tuple:
+def run_mypy_on_file(file_path_string: str, args: list[str] | None = None) -> list:
     """Run mypy on a single python file.
 
     Args:
@@ -95,7 +95,28 @@ def run_mypy_on_file(file_path_string: str, args: list[str] | None = None) -> tu
     else: 
         args_with_file_path_at_start.insert(0, f"{file_path_string}")
 
-    return mypy_api_run(args_with_file_path_at_start)
+    mypy_output_to_standard, mypy_output_to_error, mypy_return_value = mypy_api_run(args_with_file_path_at_start)
+
+    # Note that despite what mypy says, it actually writes the various linting errors to the *standard*
+    # output, not the error output. It writes fatal errors caused by odds and ends to it's error output,
+    # so it's necessary to check both the standard the the error output to actually find all of the
+    # desired errors
+
+    # If mypy returns with no errors, we can return an empty list of errors
+    if mypy_return_value == 0:
+        return []
+    
+    # Otherwise we need to filter everything mypy prints so that we only have the return errors
+    errors_to_return = []
+    for output_source in (mypy_output_to_standard, mypy_output_to_error):
+        for line in output_source.splitlines():
+            if "error:" in line:
+                errors_to_return.append(line)
+
+    return errors_to_return
+
+        
+
 
 
 if __name__ == '__main__':
