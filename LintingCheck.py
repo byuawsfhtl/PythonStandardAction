@@ -43,7 +43,6 @@ def main() -> int:
             print(f"Warning: Path not found: {path}", file=stderr)
 
     if all_errors:
-        all_errors.sort(key=lambda e: (e.file_path, e.line_number))
         for mypy_error in all_errors:
             print(mypy_error)
         print(f"\nFound {len(all_errors)} MyPy errors.")

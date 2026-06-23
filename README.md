@@ -81,7 +81,7 @@ pip install -r "../PythonStandardAction/requirements.txt"
 python "../PythonStandardAction/StandardCheck.py"
 ```
 
-This can also be done for the linting step by running the same command, but replacing the `StandardCheck.py` reference with the `LintingCheck.py` reference as follows:
+This process can also be done for the linting step by running the same commands, but replacing the `StandardCheck.py` reference with the `LintingCheck.py` reference as follows:
 
 ```cmd
 python "../PythonStandardAction/LintingCheck.py"
