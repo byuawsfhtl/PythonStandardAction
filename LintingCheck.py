@@ -59,6 +59,7 @@ def run_mypy_on_directory(directory: Path, ignore_patterns: Optional[PathSpec], 
     Args:
         directory: Directory to check
         ignore_patterns: Patterns for files to ignore
+        args: A list of all of the arguments to be passed into MyPy
         
     Returns:
         list of style errors found

@@ -43,6 +43,12 @@ def load_ignore_patterns() -> Optional[pathspec.PathSpec]:
 
 
 def load_mypy_arguments() -> list[str] | None:
+    """This function loads all of the aruments needed to override the default
+    ones for MyPy, if applicable, from the .standardignore file.
+    
+    Returns:
+        A list of arguments to pass into MyPy, or None
+    """
 
     argument_file = Path('.standardignore')
     args = []
