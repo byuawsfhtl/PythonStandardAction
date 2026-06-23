@@ -62,16 +62,22 @@ The above example ignores the sleep_for_retry function when applying standards a
 
 ## Running locally so you don't have to wait on github actions
 
-from the root fo the repo you're trying to check, run the following in a terminal:
+From the root fo the repo you're trying to check, run the following in a terminal:
 
 ```cmd
 python "path-to-this-repo/StandardCheck.py"
 ```
 
-So, if I were trying to run it on TreeTapper, and both TreeTapper and PythonStandardAction were in the same folder, I would run
+So, if I were trying to run it on TreeTapper, and both TreeTapper and PythonStandardAction were in the same folder, I would run:
 
 ```cmd
 python "../PythonStandardAction/StandardCheck.py"
+```
+
+This can also be done for the linting step by running the same command, but replacing the `StandardCheck.py` reference with the `LintingCheck.py` referece as follows:
+
+```cmd
+python "path-to-this-repo/LintingCheck.py"
 ```
 
 ## Notes about the MyPy checker step

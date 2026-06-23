@@ -1,6 +1,6 @@
 from argparse import ArgumentParser
 from pathlib import Path
-from sys import stderr
+from sys import stderr, exit
 from typing import Optional
 from pathspec import PathSpec
 from config import load_mypy_arguments, load_ignore_patterns
@@ -14,11 +14,10 @@ def main() -> int:
     Returns:
         Exit code (0 for success, 1 for errors found)
     """
+    print("Starting the Linting Check")
+
     parser = ArgumentParser(description='Modern Python style checker')
     parser.add_argument('paths', nargs='*', default=['.'], help='Paths to check (default: current directory)')
-    parser.add_argument('--config', type=Path, help='Path to configuration file')
-    parser.add_argument('--ignore', action='append', help='Error codes to ignore')
-    parser.add_argument('--max-complexity', type=int, default=15, help='Maximum cyclomatic complexity (default: 15)')
     
     args = parser.parse_args()
 
@@ -27,15 +26,17 @@ def main() -> int:
 
     all_errors: list = []
 
-    for path_str in args.path:
+    for path_str in args.paths:
         path = Path(path_str)
         if path.is_file():
+            print("Found a file")
             if should_ignore_file(path, ignore_patterns):
                 continue
             else:
                 ignored_mypy_normal_output, mypy_errors, ignored_mypy_return_value = run_mypy_on_file(path_str, mypy_args)
                 all_errors.extend(mypy_errors) 
         elif path.is_dir():
+            print("Found a directory")
             mypy_errors = run_mypy_on_directory(path, ignore_patterns, mypy_args)
             all_errors.extend(mypy_errors)
         else:
@@ -95,3 +96,7 @@ def run_mypy_on_file(file_path_string: str, args: list[str] | None = None) -> tu
         args_with_file_path_at_start.insert(0, f"{file_path_string}")
 
     return mypy_api_run(args_with_file_path_at_start)
+
+
+if __name__ == '__main__':
+    exit(main())
