@@ -115,7 +115,7 @@ def _check_sql_injection_call(node: ast.AST, file_path: str, ignore_codes: set[s
     Returns:
         the sql injection errors, if any
     """    
-    errors = []
+    errors: list[models.StyleError] = []
     if not isinstance(node, ast.Call):
         return errors
     if not (isinstance(node.func, ast.Attribute) and node.func.attr in ['execute', 'executemany']):
@@ -167,7 +167,7 @@ def _check_shell_injection_call(node: ast.AST, file_path: str, ignore_codes: set
     Returns:
         the shell injection errors, if any
     """    
-    errors = []
+    errors: list[models.StyleError] = []
     if not isinstance(node, ast.Call):
         return errors
     is_bad_attr = isinstance(node.func, ast.Attribute) and node.func.attr in ['system', 'popen', 'spawn', 'exec']

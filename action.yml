@@ -14,7 +14,15 @@ runs:
     - name: Install dependencies from requirements.txt
       shell: bash
       run: pip install -r "${{ github.action_path }}/requirements.txt"
+
+    - name: Get any missing type stubs for MyPy check
+      shell: bash
+      run: mypy --install-types --non-interactive
      
-    - name: Run Check
+    - name: Run Standard Check
       shell: bash
       run: python "${{ github.action_path }}/StandardCheck.py"
+
+    - name: Run mypy check with args
+      shell: bash
+      run:

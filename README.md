@@ -50,27 +50,53 @@ The above entries in a `.standardignore` would have the checker skip over the fo
 
 Using the `.standardignore` file specified in the section above, specific function and variable names can be skipped over on the check.
 
-The syntax to do so is the use of the `!` before the name of the variable/function to ignore.
+The syntax to do so is the use of the `name:` before the name of the variable/function to ignore.
 
 For example
 
 ```cmd
-!sleep_for_retry
+name: sleep_for_retry
 ```
 
 The above example ignores the sleep_for_retry function when applying standards as the name is required as it is an overwrite of an outside modules functionality.
 
 ## Running locally so you don't have to wait on github actions
 
-from the root fo the repo you're trying to check, run the following in a terminal:
+From the root of the repo you're trying to check, run the following in a terminal:
 
 ```cmd
 python "path-to-this-repo/StandardCheck.py"
 ```
 
-So, if I were trying to run it on TreeTapper, and both TreeTapper and PythonStandardAction were in the same folder, I would run
+The `python` command uses whatever virtual environment is currently active. Before running the checker, install this action's requirements into that environment:
 
 ```cmd
+pip install -r "path-to-this-repo/requirements.txt"
+```
+
+So, if I were trying to run it on TreeTapper, and both TreeTapper and PythonStandardAction were in the same folder, I would activate TreeTapper's virtual environment and run:
+
+```cmd
+pip install -r "../PythonStandardAction/requirements.txt"
 python "../PythonStandardAction/StandardCheck.py"
 ```
+
+This process can also be done for the linting step by running the same commands, but replacing the `StandardCheck.py` reference with the `LintingCheck.py` reference as follows:
+
+```cmd
+python "../PythonStandardAction/LintingCheck.py"
+```
+
+If the repository has an in-repo virtual environment, add it to `.standardignore` so `StandardCheck.py` and `LintingCheck.py` do not scan installed packages while walking the repository.
+
+
+## Notes about the MyPy checker step
+
+The MyPy checker step is going to default to running with the '--strict' call on every file in the application unless the entire file is ignored. Note that it doesn't ignore specific functions, classes, or lines since they are instead ignored with the usual "# type: ignore" comment that it otherwise uses. If you want to run this with different MyPy settings and arguments, simply add "mypyargs: [Your arguments here]"  to the ".standardignore" file in the format as follows:
+
+```cmd
+mypyargs: --ignore-missing-imports --deprecated-calls-exclude
+```
+
+Note that doing something like this will automatically disable the '--strict' tag in MyPy unless it is specifically included in the arguments. Regardless of if custom args are passed in or not, this step will automatically figure out the needed file path arguments so it is not necessary to add this to the beginning and will actually cause errors if you do.
 

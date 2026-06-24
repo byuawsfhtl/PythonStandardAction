@@ -24,7 +24,7 @@ def collect_imports(tree: ast.AST) -> tuple[list[ast.Import | ast.ImportFrom], l
     return imports + import_froms, import_froms
 
 
-def check_imports(all_imports: list[ast.AST], import_froms: list[ast.ImportFrom], used_names: set[str], file_path: Path, ignore_codes: set[str]) -> list[models.StyleError]:
+def check_imports(all_imports: list[ast.Import | ast.ImportFrom], import_froms: list[ast.ImportFrom], used_names: set[str], file_path: Path, ignore_codes: set[str]) -> list[models.StyleError]:
     """Run all import-related checks.
 
     Args:
@@ -56,7 +56,7 @@ def _check_import_order(imports: list[ast.Import | ast.ImportFrom], file_path: s
     Returns:
         list of style errors found
     """
-    errors = []
+    errors: list[models.StyleError] = []
     
     if not imports:
         return errors
@@ -164,7 +164,7 @@ def _check_unused_imports(imports: list[ast.Import | ast.ImportFrom], names_used
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             file_content = f.read()
-    except:
+    except(Exception):
         file_content = ""
 
     for imp in imports:
@@ -217,7 +217,7 @@ def _check_unused_from_import_nodes(imp: ast.ImportFrom, names_used: set[str], f
     Returns:
         an unused import error, or None
     """
-    errors = []
+    errors: list[models.StyleError] = []
     
     # Never flag __future__ imports as unused
     if imp.module == '__future__':
