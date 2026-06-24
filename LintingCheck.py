@@ -29,14 +29,12 @@ def main() -> int:
     for path_str in args.paths:
         path = Path(path_str)
         if path.is_file():
-            print("Found a file")
             if should_ignore_file(path, ignore_patterns):
                 continue
             else:
                 mypy_return = run_mypy_on_file(path_str, mypy_args)
                 all_errors.extend(mypy_return) 
         elif path.is_dir():
-            print("Found a directory")
             mypy_return = run_mypy_on_directory(path, ignore_patterns, mypy_args)
             all_errors.extend(mypy_return)
         else:

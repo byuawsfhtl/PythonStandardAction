@@ -16,7 +16,7 @@ import checkers.security as security_module
 import checkers.complexity as complexity_module
 
 
-def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_names: set[str] = set()) -> list[models.StyleError]:
+def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_names: set[str] | None = None) -> list[models.StyleError]:
     """Visit an AST node and perform checks.
     
     Args:
@@ -28,6 +28,8 @@ def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_nam
     Returns:
         list of style errors found
     """
+    if not ignore_names:
+        ignore_names = set()
     
     if isinstance(node, ast.ClassDef):
         return common_nodes_module.check_class(node, file_path, ignore_codes, ignore_names)
@@ -39,7 +41,7 @@ def visit_node(node: ast.AST, file_path: str, ignore_codes: set[str], ignore_nam
         return []
 
 
-def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] = set(), config: dict[str, Any] | None = None) -> list[models.StyleError]:
+def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] | None = None, config: dict[str, Any] | None = None) -> list[models.StyleError]:
     """Check a single Python file.
 
     Args:
@@ -51,6 +53,9 @@ def check_file(file_path: Path, ignore_codes: set[str], ignore_names: set[str] =
     Returns:
         list of style errors found
     """
+    if not ignore_names:
+        ignore_names = set()
+
     if not config:
         config = {}
 
