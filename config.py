@@ -42,13 +42,41 @@ def load_ignore_patterns() -> Optional[pathspec.PathSpec]:
     return pathspec.PathSpec.from_lines('gitwildmatch', patterns)
 
 
+def load_mypy_arguments() -> list[str] | None:
+    """This function loads all of the aruments needed to override the default
+    ones for MyPy, if applicable, from the .standardignore file.
+    
+    Returns:
+        A list of arguments to pass into MyPy, or None
+    """
+
+    argument_file = Path('.standardignore')
+    args = []
+
+    if not argument_file.exists():
+        return None
+        
+    with open(argument_file, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    for line in lines:
+        line = line.strip()
+        if line.startswith("mypyargs:"):
+            args = line[9:].strip().split()
+
+    if args:
+        return args
+    else:
+        return None
+
+
 def load_ignore_names() -> set[str]:
     """Load specific names to ignore from .standardignore file.
     
     Returns:
         Set of names to ignore in style checking
     """
-    ignore_names = set()
+    ignore_names: set = set()
     ignore_file = Path('.standardignore')
     
     if not ignore_file.exists():
